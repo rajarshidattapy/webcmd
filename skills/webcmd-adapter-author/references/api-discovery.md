@@ -4,6 +4,42 @@ Use this after `site-recon.md` chooses Pattern A/B/C/D/E. The output of this fil
 
 Keep `--trace on --keep-tab true --window foreground` enabled while exploring browser-backed sites.
 
+## Section 0 - Preflight Red Lines
+
+Read these before endpoint verification. If you miss either one, you can spend the rest of discovery testing the wrong thing.
+
+### 0.1 Anti-bot and WAF gates decide whether Node fetch is valid
+
+`webcmd browser analyze <url>` reports the `anti_bot` field. You can also inspect cookies and the response body manually.
+
+| Cookie or body signal | Vendor | Bare Node fetch or curl result | Strategy |
+| --- | --- | --- | --- |
+| `acw_sc__v2`, `acw_tc`, `ssxmod_itna`; body contains `arg1 = '32-HEX'` or `/ntc_captcha/` | Aliyun WAF | Slider HTML instead of real data | Verify the endpoint in browser context first; HTML-style cookie adapters can still end with Node-side fetch plus `page.getCookies()` |
+| `__cf_bm`, `cf_clearance`, `__cfduid`; body contains `Cloudflare Ray ID` or `Checking your browser` | Cloudflare | TLS or browser fingerprint is rejected | Use a browser/session-aware probe first, then choose the adapter fetch route from `adapter-template.md` |
+| `_abck`, `bm_sz`, `bm_sv` | Akamai | Often blocked even with cookies | Use a browser/session-aware probe first |
+| Body contains `geetest` or `gt_captcha` | Geetest | Slider or puzzle challenge; no programmatic solution in this skill | Out of scope; stop or use a user-visible UI strategy |
+
+Rule: if any of these anti-bot or WAF signals appear, do not use bare Node fetch as endpoint verification. First prove the endpoint from the browser context or from a page on the target origin. After that, choose the final adapter strategy normally: JSON browser APIs may use `page.fetchJson()`, while HTML-style cookie adapters should keep using Node-side `fetch` with cookies read through `page.getCookies()`.
+
+### 0.2 Cross-subdomain fetch is CORS-blocked by default
+
+For example, a page on `jobs.51job.com` fetching an API on `cupid.51job.com` will usually hit a CORS preflight unless the API returns `Access-Control-Allow-Origin`.
+
+Probe it explicitly:
+
+```bash
+webcmd browser eval "fetch('https://<target-subdomain>/api/...', { credentials: 'include' }).then(r => r.status).catch(e => 'cors:' + e.message)"
+```
+
+- A numeric status means CORS allows the request.
+- `cors:...` or `TypeError: Failed to fetch` means the browser blocked it.
+
+When it is blocked, `credentials: include` is not a CORS fix across subdomains. It only asks the browser to send cookies; it does not grant cross-origin permission. Use this fallback order:
+
+1. Prefer a same-origin endpoint on the current subdomain.
+2. Open a page on the target subdomain with `webcmd browser open https://<target-subdomain>/`, then fetch relative paths from that origin.
+3. If the data is truly cross-origin and there is no same-origin alternative, use Section 5 intercept and capture the response from the page's own request.
+
 ## Section 1 - Network Deep Read
 
 Use for Pattern A and for deeper data in Pattern B.

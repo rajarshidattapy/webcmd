@@ -24,10 +24,10 @@ clis/<site>/<name>.js
 
 ## Minimal Registry Shape
 
-Adapters register commands with `cli` from `@agentrhq/webcmd/registry`.
+Adapters register commands with `cli` and `Strategy` from `@agentrhq/webcmd/registry`.
 
 ```js
-import { cli } from '@agentrhq/webcmd/registry';
+import { cli, Strategy } from '@agentrhq/webcmd/registry';
 
 cli({
   site: 'hackernews',
@@ -35,6 +35,8 @@ cli({
   access: 'read',
   description: 'Hacker News top stories',
   domain: 'news.ycombinator.com',
+  strategy: Strategy.PUBLIC,
+  browser: false,
   args: [
     { name: 'limit', type: 'int', default: 20, help: 'Number of rows' },
   ],
@@ -80,7 +82,7 @@ Treat this as shape guidance, not a universal solution. Prefer the closest exist
 Allowed imports:
 
 ```js
-import { cli } from '@agentrhq/webcmd/registry';
+import { cli, Strategy } from '@agentrhq/webcmd/registry';
 import {
   ArgumentError,
   AuthRequiredError,
@@ -105,9 +107,121 @@ Rules:
 | `access` | Usually `read`; use write-like access only for commands that mutate state. |
 | `description` | One clear sentence. |
 | `domain` | Primary domain for auth and help output. |
+| `strategy` | Use a registry enum such as `Strategy.PUBLIC` or `Strategy.COOKIE`; align it with the strategy note. |
+| `browser` | `false` for plain Node-side adapters; `true` when the adapter needs the page, cookie jar, or browser runtime. |
 | `args` | Include type, default, and help for every external parameter. |
 | `columns` | Must exactly match row keys, including order. |
 | `pipeline` or `func` | Use the style already established by nearby adapters. |
+
+## Strategy Enum Examples
+
+The strategy note uses discovery names such as `PUBLIC_API` and `COOKIE_API`. The adapter declaration records the runtime choice with `Strategy` enum values.
+
+Use `Strategy.PUBLIC` when an anonymous, stable endpoint can be fetched directly from Node:
+
+```js
+import { cli, Strategy } from '@agentrhq/webcmd/registry';
+import { ArgumentError, CommandExecutionError, EmptyResultError } from '@agentrhq/webcmd/errors';
+
+cli({
+  site: 'example',
+  name: 'public-list',
+  access: 'read',
+  description: 'Example public listing',
+  domain: 'api.example.com',
+  strategy: Strategy.PUBLIC,
+  browser: false,
+  args: [{ name: 'limit', type: 'int', default: 20, help: 'Number of rows' }],
+  columns: ['index', 'title', 'url'],
+  func: async (args) => {
+    const limit = Number(args.limit ?? 20);
+    if (!Number.isInteger(limit) || limit <= 0) {
+      throw new ArgumentError('limit must be a positive integer');
+    }
+
+    const resp = await fetch(`https://api.example.com/items?limit=${limit}`, {
+      headers: { 'User-Agent': 'Mozilla/5.0' },
+    });
+    if (!resp.ok) throw new CommandExecutionError(`example request failed: HTTP ${resp.status}`);
+
+    const data = await resp.json();
+    const items = Array.isArray(data?.items) ? data.items : [];
+    if (!items.length) throw new EmptyResultError('example public-list', 'API returned no rows');
+
+    return items.map((item, index) => ({
+      index: index + 1,
+      title: item.title,
+      url: item.url,
+    }));
+  },
+});
+```
+
+Use `Strategy.COOKIE` when the endpoint or HTML page needs the user's existing browser session. Read cookies with `page.getCookies()` and pass them to Node-side `fetch`; do not rely on `document.cookie` for HttpOnly auth cookies.
+
+```js
+import { cli, Strategy } from '@agentrhq/webcmd/registry';
+import { ArgumentError, AuthRequiredError, CommandExecutionError, EmptyResultError } from '@agentrhq/webcmd/errors';
+
+const BASE = 'https://www.example.com';
+const HOST = 'www.example.com';
+const ROOT = '.example.com';
+
+async function cookieHeader(page) {
+  const seen = new Map();
+  for (const opts of [{ domain: HOST }, { domain: ROOT }]) {
+    for (const cookie of await page.getCookies(opts).catch(() => [])) {
+      if (!seen.has(cookie.name)) seen.set(cookie.name, cookie.value);
+    }
+  }
+  return [...seen].map(([name, value]) => `${name}=${value}`).join('; ');
+}
+
+function parseRowsFromHtml(html) {
+  return [...html.matchAll(/<a[^>]+href="([^"]+)"[^>]*>([^<]+)<\/a>/g)].map((match, index) => ({
+    index: index + 1,
+    title: match[2].trim(),
+    time: '',
+  }));
+}
+
+cli({
+  site: 'example',
+  name: 'private-list',
+  access: 'read',
+  description: 'Example private listing',
+  domain: HOST,
+  strategy: Strategy.COOKIE,
+  browser: true,
+  navigateBefore: false,
+  args: [{ name: 'limit', type: 'int', default: 20, help: 'Number of rows' }],
+  columns: ['index', 'title', 'time'],
+  func: async (page, args) => {
+    const limit = Number(args.limit ?? 20);
+    if (!Number.isInteger(limit) || limit <= 0) {
+      throw new ArgumentError('limit must be a positive integer');
+    }
+
+    const cookie = await cookieHeader(page);
+    const resp = await fetch(`${BASE}/inbox`, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0',
+        Referer: `${BASE}/`,
+        ...(cookie ? { Cookie: cookie } : {}),
+      },
+      redirect: 'follow',
+    });
+    if (!resp.ok) throw new CommandExecutionError(`example request failed: HTTP ${resp.status}`);
+
+    const html = await resp.text();
+    if (/login required|sign in/i.test(html)) throw new AuthRequiredError(HOST);
+
+    const rows = parseRowsFromHtml(html).slice(0, limit);
+    if (!rows.length) throw new EmptyResultError('example private-list', 'page returned no rows');
+    return rows;
+  },
+});
+```
 
 ## Parameter Safety
 

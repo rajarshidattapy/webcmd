@@ -1,6 +1,7 @@
 ---
 name: webcmd-adapter-author
 description: Use when writing a Webcmd adapter for a new site or adding a new command to an existing site. Guides end-to-end from first recon through field decoding, adapter coding, and verify. Replaces webcmd-oneshot / webcmd-explorer. For ad-hoc browser driving without an adapter, use webcmd-browser instead; for top-level orientation, use webcmd-usage.
+allowed-tools: Bash(webcmd:*), Read, Edit, Write, Grep
 ---
 
 # Webcmd Adapter Authoring

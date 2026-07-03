@@ -98,8 +98,56 @@ It should include:
 - types
 - patterns
 - notEmpty
+- mustNotContain
+- mustBeTruthy
 
 Write it after the first passing run, then tighten it manually and verify again.
+
+Example:
+
+```json
+{
+  "args": { "limit": 3 },
+  "expect": {
+    "rowCount": { "min": 1, "max": 3 },
+    "columns": ["rank", "tid", "title", "url"],
+    "types": {
+      "rank": "number",
+      "tid": "string|number",
+      "title": "string",
+      "url": "string"
+    },
+    "patterns": {
+      "url": "^https://www\\.example\\.com/thread-"
+    },
+    "notEmpty": ["title", "url"],
+    "mustNotContain": {
+      "title": ["breadcrumb:", "category:"]
+    },
+    "mustBeTruthy": ["rank"]
+  }
+}
+```
+
+Field rules:
+
+- `args` controls how verify invokes the adapter. Use an object such as `{ "limit": 3 }` for named flags; verify expands it to `--limit 3`.
+- Use an array such as `["1234567", "--limit", "3"]` for positional-subject adapters (`<tid>`, `<url>`, `<query>`). The array is appended exactly as written. Do not encode a positional subject as `{ "tid": "1234567", "limit": 3 }`, because that becomes `--tid 1234567 --limit 3`.
+- `expect.rowCount.{min,max}` is inclusive. Stable list APIs should use a tight range; dynamic feeds can use a wider range.
+- `expect.columns` is strict. Each row must contain every listed key.
+- `expect.types` supports `|` unions such as `string|null` and the `any` wildcard for intentionally variable fields.
+- `expect.patterns` uses regular expression strings. Remember to escape backslashes as `\\`.
+- `expect.notEmpty` trims string values and fails when core business fields are empty.
+- `expect.mustNotContain` is `Record<column, string[]>`. It blocks soft contamination such as a `description` that accidentally includes neighboring `address:` or `category:` text.
+- `expect.mustBeTruthy` lists columns whose values must be JavaScript truthy. Use it to catch silent `|| 0`, `|| false`, or empty-string fallbacks that `notEmpty` can miss on numeric or boolean business fields.
+
+Fixture workflow:
+
+- `--write-fixture` is only a seed. It usually writes `rowCount.min=1`, `columns`, and `types`; it does not know the business-specific `patterns`, `notEmpty`, `mustNotContain`, or `mustBeTruthy` checks.
+- After generating the seed, tighten it manually with URL/date/ID patterns, core-field `notEmpty`, contamination guards in `mustNotContain`, truthiness guards in `mustBeTruthy`, and a realistic `rowCount`.
+- For positional-subject adapters, handwrite or correct `args` as an array because the seed cannot infer the subject shape.
+- If a site change makes the fixture stale, compare at least one visible page value before running `--update-fixture`.
+- Do not loosen fixtures just to make verify pass. A failed pattern or guard is evidence to check the adapter output first; accepting wrong data by weakening the fixture defeats the fixture.
 
 ## `fixtures/<cmd>-<YYYYMMDDHHMM>.json`
 
