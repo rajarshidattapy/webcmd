@@ -64,6 +64,10 @@ jobs:
         if: ${{ steps.release.outputs.release_created }}
         run: npm test
 
+      - name: Check npm package executable
+        if: ${{ steps.release.outputs.release_created }}
+        run: npm run check:package-bin
+
       - name: Publish to npm
         if: ${{ steps.release.outputs.release_created }}
         run: npm publish --provenance --access public --ignore-scripts
