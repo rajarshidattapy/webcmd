@@ -123,12 +123,6 @@ export async function runBrowserDoctor(opts: DoctorOptions = {}): Promise<Doctor
       );
     }
   }
-  if (runtimeConnected && !runtimeVersion) {
-    issues.push(
-      'Cloak runtime is connected but did not report a version.\n' +
-      '  Try webcmd daemon restart, then reopen Chrome/Chromium if the version remains unavailable.',
-    );
-  }
   if (!connectivity.ok) {
     issues.push(`Browser connectivity test failed: ${connectivity.error ?? 'unknown'}`);
   }
@@ -172,7 +166,7 @@ export function renderBrowserDoctorReport(report: DoctorReport): string {
   lines.push(`${daemonIcon} Daemon: ${daemonLabel}`);
 
   // Runtime status
-  const runtimeIcon = report.runtimeFlaky || (report.runtimeConnected && !report.runtimeVersion)
+  const runtimeIcon = report.runtimeFlaky
     ? '[WARN]'
     : report.runtimeConnected ? '[OK]' : '[MISSING]';
   const runtimeVersion = !report.runtimeConnected

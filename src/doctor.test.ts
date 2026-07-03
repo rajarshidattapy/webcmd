@@ -100,17 +100,17 @@ describe('doctor report rendering', () => {
     expect(text).toContain('[MISSING] Runtime: Cloak not connected');
   });
 
-  it('renders a warning when the runtime version is unknown', () => {
+  it('renders OK when the connected Cloak runtime version is unknown', () => {
     const text = strip(renderBrowserDoctorReport({
       daemonRunning: true,
       runtimeConnected: true,
       runtimeName: 'Cloak',
-      issues: ['Cloak runtime is connected but did not report a version.'],
+      issues: [],
     }));
 
-    expect(text).toContain('[WARN] Runtime: Cloak connected (version unknown)');
-    expect(text).toContain('Cloak runtime is connected but did not report a version.');
-    expect(text).not.toContain('Everything looks good!');
+    expect(text).toContain('[OK] Runtime: Cloak connected (version unknown)');
+    expect(text).not.toContain('Cloak runtime is connected but did not report a version.');
+    expect(text).toContain('Everything looks good!');
   });
 
   it('renders connectivity OK when live test succeeds', () => {
@@ -244,7 +244,7 @@ describe('doctor report rendering', () => {
     expect(closeWindow).toHaveBeenCalledTimes(1);
   });
 
-  it('reports an issue when the runtime is connected but does not report a version', async () => {
+  it('does not report an issue when the connected Cloak runtime does not report a version', async () => {
     const status = {
       state: 'ready' as const,
       status: {
@@ -257,9 +257,9 @@ describe('doctor report rendering', () => {
 
     const report = await runBrowserDoctor();
 
-    expect(report.issues).toEqual(expect.arrayContaining([
-      expect.stringContaining('did not report a version'),
-    ]));
+    expect(report.runtimeConnected).toBe(true);
+    expect(report.runtimeVersion).toBeUndefined();
+    expect(report.issues.join('\n')).not.toContain('did not report a version');
   });
 
   it('does not compare runtime version to CLI version or cached extension updates', async () => {
