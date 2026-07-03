@@ -1,4 +1,5 @@
-<img width="2054" height="766" alt="Group 52" src="https://github.com/user-attachments/assets/9080bdf2-55c5-4522-9137-18eeb12f417d" />
+<img width="2054" height="766" alt="Group 54" src="https://github.com/user-attachments/assets/3e5b9702-5ffd-43bd-ab1b-2319a8cc0e2a" />
+
 
 # Webcmd
 
@@ -7,9 +8,9 @@
     <img alt="NPM version" src="https://img.shields.io/npm/v/@agentrhq/webcmd.svg?style=for-the-badge&color=1E88E5&labelColor=000000">
   </a>
 
-  <a href="https://github.com/agentrhq/webcmd/blob/main/LICENSE">
-    <img alt="License" src="https://img.shields.io/npm/l/@agentrhq/webcmd.svg?style=for-the-badge&color=1E88E5&labelColor=000000">
-  </a>
+<a href="https://github.com/agentrhq/webcmd/blob/main/LICENSE">
+  <img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-1E88E5.svg?style=for-the-badge&labelColor=000000">
+</a>
 
   <a href="https://github.com/agentrhq/webcmd/discussions">
     <img alt="Join the community on GitHub" src="https://img.shields.io/badge/Join%20the%20community-1E88E5.svg?style=for-the-badge&logo=github&labelColor=000000&logoWidth=20">
