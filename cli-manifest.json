@@ -3197,14 +3197,14 @@
         "type": "boolean",
         "default": false,
         "required": false,
-        "help": "Enable ChatGPT 深度研究 (Deep Research)"
+        "help": "Enable ChatGPT Deep Research (Deep Research)"
       },
       {
         "name": "web-search",
         "type": "boolean",
         "default": false,
         "required": false,
-        "help": "Enable ChatGPT 网页搜索 (Web Search)"
+        "help": "Enable ChatGPT Web Search (Web Search)"
       }
     ],
     "columns": [
@@ -3471,24 +3471,20 @@
           "fast",
           "speed",
           "instant",
-          "极速",
           "balanced",
           "balance",
           "medium",
-          "均衡",
           "advanced",
           "high",
           "thinking",
-          "高级",
           "very-high",
           "ultra",
           "xhigh",
           "x-high",
           "extra-high",
-          "超高",
+          "very high",
           "pro",
-          "professional",
-          "专业"
+          "professional"
         ]
       },
       {
@@ -5277,7 +5273,7 @@
   {
     "site": "coingecko",
     "name": "top",
-    "description": "按市值排序的加密货币行情（默认 USD）",
+    "description": "Cryptocurrency quotes by market cap (default USD)",
     "access": "read",
     "domain": "api.coingecko.com",
     "strategy": "public",
@@ -5288,14 +5284,14 @@
         "type": "string",
         "default": "usd",
         "required": false,
-        "help": "计价币种 (usd / cny / eur / jpy ...)"
+        "help": "quote currency (usd / cny / eur / jpy ...)"
       },
       {
         "name": "limit",
         "type": "int",
         "default": 10,
         "required": false,
-        "help": "返回数量（默认 10，最多 250）"
+        "help": "Number to return (default 10, maximum 250)"
       }
     ],
     "columns": [
@@ -7394,7 +7390,7 @@
   {
     "site": "facebook",
     "name": "notifications",
-    "description": "Get recent Facebook notifications (含 unread / time / url / notif_id / notif_type 列)",
+    "description": "Get recent Facebook notifications (includes unread / time / url / notif_id / notif_type columns)",
     "access": "read",
     "domain": "www.facebook.com",
     "strategy": "cookie",
@@ -8587,7 +8583,7 @@
   {
     "site": "google-scholar",
     "name": "search",
-    "description": "Google Scholar 学术搜索",
+    "description": "Google Scholar scholar search",
     "access": "read",
     "domain": "scholar.google.com",
     "strategy": "public",
@@ -8598,14 +8594,14 @@
         "type": "str",
         "required": true,
         "positional": true,
-        "help": "搜索关键词"
+        "help": "Search keyword"
       },
       {
         "name": "limit",
         "type": "int",
         "default": 10,
         "required": false,
-        "help": "返回结果数量 (max 20)"
+        "help": "Number of results to return (max 20)"
       }
     ],
     "columns": [
@@ -13340,7 +13336,7 @@
   {
     "site": "medium",
     "name": "feed",
-    "description": "Medium 热门文章 Feed",
+    "description": "Medium popular posts Feed",
     "access": "read",
     "domain": "medium.com",
     "strategy": "cookie",
@@ -13351,14 +13347,14 @@
         "type": "str",
         "default": "",
         "required": false,
-        "help": "话题标签（如 technology, programming, ai）"
+        "help": "Topic (for example technology, programming, ai)"
       },
       {
         "name": "limit",
         "type": "int",
         "default": 20,
         "required": false,
-        "help": "返回的文章数量"
+        "help": "Number of posts to return"
       }
     ],
     "columns": [
@@ -13377,7 +13373,7 @@
   {
     "site": "medium",
     "name": "search",
-    "description": "搜索 Medium 文章",
+    "description": "Search Medium posts",
     "access": "read",
     "domain": "medium.com",
     "strategy": "cookie",
@@ -13388,14 +13384,14 @@
         "type": "str",
         "required": true,
         "positional": true,
-        "help": "搜索关键词"
+        "help": "Search keyword"
       },
       {
         "name": "limit",
         "type": "int",
         "default": 20,
         "required": false,
-        "help": "返回的文章数量"
+        "help": "Number of posts to return"
       }
     ],
     "columns": [
@@ -13452,7 +13448,7 @@
   {
     "site": "medium",
     "name": "user",
-    "description": "获取 Medium 用户的文章列表",
+    "description": "Get Medium user posts",
     "access": "read",
     "domain": "medium.com",
     "strategy": "cookie",
@@ -13463,14 +13459,14 @@
         "type": "str",
         "required": true,
         "positional": true,
-        "help": "Medium 用户名（如 @username 或 username）"
+        "help": "Medium username(for example @username or username)"
       },
       {
         "name": "limit",
         "type": "int",
         "default": 20,
         "required": false,
-        "help": "返回的文章数量"
+        "help": "Number of posts to return"
       }
     ],
     "columns": [
@@ -16910,7 +16906,7 @@
   {
     "site": "reddit",
     "name": "hot",
-    "description": "Reddit 热门帖子",
+    "description": "Reddit hot posts",
     "access": "read",
     "domain": "www.reddit.com",
     "strategy": "cookie",
@@ -17689,7 +17685,7 @@
   {
     "site": "reuters",
     "name": "article-detail",
-    "description": "Reuters 路透社文章详情：标题/作者/正文文本",
+    "description": "Reuters Reuters article detail:title/author/body text",
     "access": "read",
     "domain": "www.reuters.com",
     "strategy": "cookie",
@@ -17753,7 +17749,7 @@
   {
     "site": "reuters",
     "name": "search",
-    "description": "Reuters 路透社新闻搜索",
+    "description": "Reuters Reuters news search",
     "access": "read",
     "domain": "www.reuters.com",
     "strategy": "cookie",
@@ -20415,7 +20411,7 @@
   {
     "site": "substack",
     "name": "feed",
-    "description": "Substack 热门文章 Feed",
+    "description": "Substack popular posts Feed",
     "access": "read",
     "domain": "substack.com",
     "strategy": "cookie",
@@ -20426,14 +20422,14 @@
         "type": "str",
         "default": "all",
         "required": false,
-        "help": "文章分类: all, tech, business, culture, politics, science, health"
+        "help": "Post category: all, tech, business, culture, politics, science, health"
       },
       {
         "name": "limit",
         "type": "int",
         "default": 20,
         "required": false,
-        "help": "返回的文章数量"
+        "help": "Number of posts to return"
       }
     ],
     "columns": [
@@ -20452,7 +20448,7 @@
   {
     "site": "substack",
     "name": "publication",
-    "description": "获取特定 Substack Newsletter 的最新文章",
+    "description": "Get a specific Substack Newsletter latest posts",
     "access": "read",
     "domain": "substack.com",
     "strategy": "cookie",
@@ -20463,14 +20459,14 @@
         "type": "str",
         "required": true,
         "positional": true,
-        "help": "Newsletter URL（如 https://example.substack.com）"
+        "help": "Newsletter URL(for example https://example.substack.com)"
       },
       {
         "name": "limit",
         "type": "int",
         "default": 20,
         "required": false,
-        "help": "返回的文章数量"
+        "help": "Number of posts to return"
       }
     ],
     "columns": [
@@ -20488,7 +20484,7 @@
   {
     "site": "substack",
     "name": "search",
-    "description": "搜索 Substack 文章和 Newsletter",
+    "description": "Search Substack posts and newsletters",
     "access": "read",
     "domain": "substack.com",
     "strategy": "public",
@@ -20499,14 +20495,14 @@
         "type": "str",
         "required": true,
         "positional": true,
-        "help": "搜索关键词"
+        "help": "Search keyword"
       },
       {
         "name": "type",
         "type": "str",
         "default": "posts",
         "required": false,
-        "help": "搜索类型（posts=文章, publications=Newsletter）",
+        "help": "Search type(posts=posts, publications=Newsletter)",
         "choices": [
           "posts",
           "publications"
@@ -20517,7 +20513,7 @@
         "type": "int",
         "default": 20,
         "required": false,
-        "help": "返回结果数量"
+        "help": "Number of results to return"
       }
     ],
     "columns": [
@@ -22242,7 +22238,7 @@
         "type": "string",
         "required": true,
         "positional": true,
-        "help": "Keywords to match (comma-separated for OR, e.g. \"群,微信\")"
+        "help": "Keywords to match (comma-separated for OR, e.g. \"invoice,urgent\")"
       },
       {
         "name": "max",
@@ -23383,7 +23379,7 @@
         "type": "string",
         "required": true,
         "positional": true,
-        "help": "Message text to send (e.g. \"我的微信 wxkabi\")"
+        "help": "Message text to send (e.g. \"my messaging handle wxkabi\")"
       },
       {
         "name": "max",
@@ -24672,7 +24668,7 @@
   {
     "site": "yahoo-finance",
     "name": "quote",
-    "description": "Yahoo Finance 股票行情",
+    "description": "Yahoo Finance stock quote",
     "access": "read",
     "domain": "finance.yahoo.com",
     "strategy": "cookie",

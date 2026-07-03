@@ -812,7 +812,7 @@
     "command": "zhihu/collection",
     "file": "clis/zhihu/collection.js",
     "line": 131,
-    "text": "const pageLimit = Math.min(requestedLimit, 20); // 知乎 API 限制每页最大 20",
+    "text": "const pageLimit = Math.min(requestedLimit, 20); // Zhihu API caps each page at 20",
     "occurrence": 0
   },
   {
@@ -972,7 +972,7 @@
     "command": "v2ex/daily",
     "file": "clis/v2ex/daily.js",
     "line": 93,
-    "text": "return [{ status: '🎉 签到成功', message: `当前余额: ${verifyResult.balance || '未知'}` }];",
+    "text": "return [{ status: 'Check-in succeeded', message: `Current balance: ${verifyResult.balance || 'unknown'}` }];",
     "occurrence": 0
   },
   {
