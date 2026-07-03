@@ -77,7 +77,7 @@ jobs:
           GEMINI_RELEASE_NOTES_MODEL: ${{ vars.GEMINI_RELEASE_NOTES_MODEL }}
         run: |
           set -euo pipefail
-          npm run generate-release-notes -- "${{ steps.release.outputs.tag_name }}" > "$RUNNER_TEMP/release-notes.md"
+          npm --silent run generate-release-notes -- "${{ steps.release.outputs.tag_name }}" > "$RUNNER_TEMP/release-notes.md"
           if [ -s "$RUNNER_TEMP/release-notes.md" ]; then
             gh release edit "${{ steps.release.outputs.tag_name }}" --notes-file "$RUNNER_TEMP/release-notes.md"
           else

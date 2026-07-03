@@ -52,4 +52,23 @@ Implemented the Gemini-backed release notes CLI wrapper in `scripts/generate-rel
 
 - Scope stayed within Task 2: CLI wrapper, dependency/script wiring, workflow integration, and wrapper-focused test coverage.
 - The implementation keeps GitHub reads read-only and delegates prompt/normalization logic to the existing helper module instead of duplicating it.
-- The main tradeoff is the new project `.npmrc` entry to suppress npm's stdout banner; this was necessary to satisfy the brief's exact fallback verification command.
+- The initial `.npmrc` workaround was removed after review in favor of command-level silence in the workflow step.
+
+## Fix Report: Review Follow-up
+
+- Removed the repo-wide `.npmrc` `loglevel=silent` setting so npm behavior is no longer changed globally.
+- Updated `.github/workflows/release.yml` to use command-level silence only for the release-notes capture step: `npm --silent run generate-release-notes -- "${{ steps.release.outputs.tag_name }}" > "$RUNNER_TEMP/release-notes.md"`.
+- Kept the existing CLI behavior and tests intact; no code changes were needed in `scripts/generate-release-notes.ts` or `src/generate-release-notes-cli.test.ts` for this follow-up.
+
+## Verification
+
+- `npm run typecheck`
+- `npx vitest run --project unit src/release-notes.test.ts`
+- `npx vitest run --project unit src/generate-release-notes-cli.test.ts`
+- `GEMINI_API_KEY= npm --silent run generate-release-notes -- v0.0.0 > /tmp/webcmd-release-notes.md && test ! -s /tmp/webcmd-release-notes.md`
+
+## Results
+
+- Typecheck passed.
+- Both Vitest unit suites passed.
+- The missing-key smoke test passed: the output file stayed empty and the warning was emitted to stderr.
