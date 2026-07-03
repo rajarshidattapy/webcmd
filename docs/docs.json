@@ -1,0 +1,35 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "mint",
+  "name": "Webcmd",
+  "colors": {
+    "primary": "#1E88E5"
+  },
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Docs",
+        "groups": [
+          {
+            "group": "Start",
+            "pages": [
+              "index",
+              "quickstart",
+              "concepts"
+            ]
+          },
+          {
+            "group": "Build",
+            "pages": [
+              "cli-reference",
+              "browser-sessions",
+              "authoring",
+              "generated-clis",
+              "plugins-and-skills"
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}
