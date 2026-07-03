@@ -275,8 +275,7 @@ describe('twitter parseTweetUrl', () => {
 describe('twitter buildTwitterArticleScopeSource', () => {
     // JSDOM-based tests prove the returned source actually works on real DOM —
     // mocked `evaluate` tests in adapter specs only verify the script string
-    // contains expected tokens, but cannot catch silent matching bugs (cf.
-    // dianping #1312: mocked-evaluate single tests miss in-browser logic bugs).
+    // contains expected tokens, but cannot catch silent in-browser matching bugs.
     function loadHelpers(tweetId, dom) {
         const source = buildTwitterArticleScopeSource(tweetId);
         const probe = new Function(

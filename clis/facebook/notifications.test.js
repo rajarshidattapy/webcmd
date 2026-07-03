@@ -14,8 +14,7 @@
 //     <span>Ndays</span></abbr>` for time, and a `<div role="button"
 //     aria-label="Mark as read,<body>">` for the bare body text.
 //
-// Per dianping #1313 / hupu #1387 / xiaoe #1388 pattern: the live IIFE
-// embeds the same `extractNotificationRowsFromDoc` function via
+// The live IIFE embeds the same `extractNotificationRowsFromDoc` function via
 // `${fn.toString()}` so the extractor seen by these JSDOM tests is the
 // exact same code that runs in the browser.
 

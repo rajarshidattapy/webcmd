@@ -13,8 +13,8 @@ describe('classifyAdapter', () => {
     expect(classifyAdapter('localhost')).toBe('app');
   });
 
-  it('classifies non-DNS domain strings as app (e.g. literal "doubao-app")', () => {
-    expect(classifyAdapter('doubao-app')).toBe('app');
+  it('classifies non-DNS domain strings as app (e.g. literal "custom-app")', () => {
+    expect(classifyAdapter('custom-app')).toBe('app');
   });
 
   it('defaults missing domain to site (most adapters without explicit domain are public web scrapers)', () => {

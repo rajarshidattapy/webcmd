@@ -445,7 +445,7 @@ cli({
         if (captionData?.error) {
             const msg = `${captionData.error}${captionData.available ? ' (available: ' + captionData.available.join(', ') + ')' : ''}`;
             // "No captions available" is a valid empty data condition(creator disabled captions + YT no auto captions),
-            // localized text bilibili subtitle localized text EmptyResultError same pattern.downstream should treat code EMPTY_RESULT skip
+            // Localized "no captions" text follows the same empty-result pattern; downstream should treat code EMPTY_RESULT as skip.
             // retry and softFail count.other error(HTTP / parse / temporary empty response)still treat as fetch failure.
             if (captionData.error === 'No captions available for this video') {
                 throw new EmptyResultError('youtube transcript', 'This video has no captions(creator disabled captions + no automatic captions).');
@@ -640,7 +640,7 @@ cli({
         }
         // Step 4: Format output based on mode
         if (mode === 'raw') {
-            // Precise timestamps in seconds with decimals, matching bilibili/subtitle format
+            // Precise timestamps in seconds with decimals, matching the subtitle segment format.
             return segments.map((seg, i) => ({
                 index: i + 1,
                 start: Number(seg.start).toFixed(2) + 's',

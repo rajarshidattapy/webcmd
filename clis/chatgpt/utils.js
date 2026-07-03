@@ -179,8 +179,7 @@ export function requireNonNegativeInt(value, flagLabel, hint) {
 // The browser bridge wraps every `page.evaluate(...)` return value in a
 // `{ session, data }` envelope. Adapters that read `.length` or
 // `Array.isArray(payload)` directly on the envelope silently see "no data" —
-// this matches the failure mode fixed for xiaohongshu/rednote (#1561) and
-// weibo (#1568).
+// this matches the failure mode fixed in earlier adapter regressions.
 //
 // `unwrapEvaluateResult` is a defensive ternary: it unwraps when the payload
 // looks like an envelope, otherwise passes the value through unchanged so

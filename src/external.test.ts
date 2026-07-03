@@ -64,7 +64,7 @@ describe('parseCommand', () => {
 
 describe('formatExternalCliLabel', () => {
   it('shows the package name when the executable name differs', () => {
-    expect(formatExternalCliLabel({ name: 'wx', binary: 'wx', package: 'wx-cli' })).toBe('wx(wx-cli)');
+    expect(formatExternalCliLabel({ name: 'tg', binary: 'tg', package: 'tg-cli' })).toBe('tg(tg-cli)');
   });
 
   it('keeps the label compact when package and name match', () => {

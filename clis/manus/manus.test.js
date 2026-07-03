@@ -75,7 +75,7 @@ const SKILLS = {
   ],
 };
 
-// ── makePage helper (queue pattern matching kimi.test.js) ─────────────────
+// ── makePage helper with queued evaluate results ──────────────────────────
 
 /**
  * Create a mock page with a queue of page.evaluate results.

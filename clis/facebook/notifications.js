@@ -22,8 +22,7 @@
 //     silent clamp; `ArgumentError` on bad input.
 //   - Pure extractor `extractNotificationRowsFromDoc` is a Node-side
 //     export — JSDOM-against-frozen-fixture tests call it directly while
-//     the live IIFE embeds it via `${fn.toString()}` (mirrors hupu
-//     #1387 / xiaoe #1388 / dianping #1313 pattern). Helpers
+//     the live IIFE embeds it via `${fn.toString()}`. Helpers
 //     `stripMarkAsReadPrefix`, `stripAnchorChrome`, `parseNotifQuery`
 //     are also pure exports for the same reason.
 //   - Seven columns instead of three:
