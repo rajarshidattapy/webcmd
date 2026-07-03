@@ -2,6 +2,7 @@
   "$schema": "https://mintlify.com/docs.json",
   "theme": "mint",
   "name": "Webcmd",
+  "description": "An agent runtime for turning websites, apps, APIs, and local tools into deterministic CLIs.",
   "colors": {
     "primary": "#1E88E5"
   },
@@ -19,13 +20,25 @@
             ]
           },
           {
-            "group": "Build",
+            "group": "Work With Agents",
             "pages": [
+              "agent-prompts",
               "cli-reference",
-              "browser-sessions",
+              "agent-runtime",
+              "generated-clis"
+            ]
+          },
+          {
+            "group": "Extend",
+            "pages": [
               "authoring",
-              "generated-clis",
               "plugins-and-skills"
+            ]
+          },
+          {
+            "group": "Support",
+            "pages": [
+              "troubleshooting"
             ]
           }
         ]
