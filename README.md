@@ -1,16 +1,18 @@
 <img width="2054" height="766" alt="Webcmd banner" src="https://github.com/user-attachments/assets/3e5b9702-5ffd-43bd-ab1b-2319a8cc0e2a" />
 
 # Webcmd
-
 <p align="center">
   <a href="https://www.npmjs.com/package/@agentrhq/webcmd">
     <img alt="NPM version" src="https://img.shields.io/npm/v/@agentrhq/webcmd.svg?style=for-the-badge&color=1E88E5&labelColor=000000">
   </a>
+  <a href="https://www.npmjs.com/package/@agentrhq/webcmd">
+    <img alt="NPM downloads" src="https://img.shields.io/npm/dt/@agentrhq/webcmd.svg?style=for-the-badge&color=1E88E5&labelColor=000000">
+  </a>
   <a href="https://github.com/agentrhq/webcmd/blob/main/LICENSE">
     <img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-1E88E5.svg?style=for-the-badge&labelColor=000000">
   </a>
-  <a href="https://github.com/agentrhq/webcmd/discussions">
-    <img alt="Join the community on GitHub" src="https://img.shields.io/badge/Join%20the%20community-1E88E5.svg?style=for-the-badge&logo=github&labelColor=000000&logoWidth=20">
+  <a href="https://discord.gg/9YP2C9tvMp">
+    <img alt="Join the community on Discord" src="https://img.shields.io/badge/Join%20the%20community-1E88E5.svg?style=for-the-badge&logo=discord&logoColor=white&labelColor=000000&logoWidth=20">
   </a>
 </p>
 
