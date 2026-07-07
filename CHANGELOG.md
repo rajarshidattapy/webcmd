@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.2.1](https://github.com/agentrhq/webcmd/compare/webcmd-v0.2.0...webcmd-v0.2.1) (2026-07-07)
+
+
+### Features
+
+* **browser:** route default profiles as preferred ([1405780](https://github.com/agentrhq/webcmd/commit/1405780a25cf01916f3a0240b1d19454aa68914a))
+* **twitter:** add quotes and bookmarks to timeline output ([fc63ae0](https://github.com/agentrhq/webcmd/commit/fc63ae0b4673d5e8994af286caeae795780e3678))
+* **twitter:** add quotes and bookmarks to timeline output ([1bafd47](https://github.com/agentrhq/webcmd/commit/1bafd4751d9dde21ad506f6cdf4c674a7f383ccd))
+
+
+### Bug Fixes
+
+* **external:** handle Windows command shims ([74b7b61](https://github.com/agentrhq/webcmd/commit/74b7b6179904ff93e51f392ff25bca7eb629c904))
+* **twitter:** harden tweet deletion flow ([491ad76](https://github.com/agentrhq/webcmd/commit/491ad76be59763c95db84a15821cef62c7cf8de2))
+
 ## [0.2.0](https://github.com/agentrhq/webcmd/compare/webcmd-v0.1.2...webcmd-v0.2.0) (2026-07-03)
 
 
