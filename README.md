@@ -20,13 +20,19 @@
 
 # Webcmd
 
-**Turn websites, browser sessions, desktop apps, and local tools into deterministic command-line surfaces for people and AI agents.**
+**Self-learning browser infra for AI agents.**
 
-Webcmd gives you one command surface for three kinds of automation:
+WebCMD learns the navigational context of websites as agents use them, then compiles that knowledge into deterministic commands for faster, cheaper, more reliable browser automation. The goal is simple: stop making agents rediscover the same sites on every run and cut browser-agent token spend by up to 90%.
 
-- **Use built-in adapters** for sites like Reddit, Hacker News, LinkedIn, Twitter/X, TikTok, Amazon, PubMed, ChatGPT, Claude, Gemini, NotebookLM, and many more.
-- **Let AI agents operate a real browser** with `webcmd browser <session> ...` primitives: open pages, inspect DOM snapshots, click, type, select, extract, capture network calls, and verify flows.
-- **Wrap local tools and desktop apps** so agents can discover and invoke `gh`, `docker`, `vercel`, Electron apps, and other command surfaces through the same `webcmd ...` entrypoint.
+On top of vanilla browser interactions, WebCMD adds 3 layers of learnings. Each layer collapses cost and variance for the layer above it.
+
+| Layer | Scenario | What Webcmd Helps With |
+| --- | --- | --- |
+| 1. Live browser control | The site is unfamiliar. | Use `webcmd browser` to inspect, click, type, extract, capture network calls, and complete the task in a real browser. |
+| 2. Sitemap memory | The site is familiar, but the action space is not fully known. | Capture an agent-facing sitemap of observed pages, states, actions, workflows, APIs, pitfalls, and fallback paths. |
+| 3. CLI authoring | The action space is known, but the path is still too variable for one fixed sequence. | Explicitly author a reusable `webcmd <site> <command>` adapter with structured output, so future agents spend tokens on the task instead of navigation. |
+| 4. Custom CLI commands | The workflow is deterministic enough to stop browsing. | Extend the CLI with a tailored command so the workflow runs instantly with the least amount of tokens. |
+
 
 ## Quick Start
 
@@ -145,7 +151,7 @@ webcmd <site> <command> -f json
 webcmd <site> <command> --trace retain-on-failure -f json
 ```
 
-Start with adapters. Fall back to `webcmd browser` only when no adapter covers the task or you are debugging/building one.
+Start with adapters. Fall back to `webcmd browser` only when no adapter covers the task or you are teaching Webcmd a new site flow.
 
 ## Browser Automation
 
@@ -241,7 +247,7 @@ Use plugins for private company workflows, community adapters, or experiments th
 
 ## Writing Adapters
 
-When a site is not covered yet, author a reusable adapter instead of leaving an agent to click through the same browser flow every time.
+When a site is not covered yet, author a reusable adapter instead of leaving an agent to spend tokens clicking through the same browser flow every time.
 
 ```bash
 webcmd browser init <site>/<command>
