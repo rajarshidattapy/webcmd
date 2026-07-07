@@ -1071,7 +1071,7 @@ describe('profile list', () => {
         runtimeVersion: '1.0.3',
         pending: 0,
         memoryMB: 20,
-        port: 19825,
+        port: 9777,
       }),
     } as Response);
     const program = createProgram('', '');
@@ -1097,7 +1097,7 @@ describe('profile list', () => {
         profiles: [],
         pending: 0,
         memoryMB: 20,
-        port: 19825,
+        port: 9777,
       }),
     } as Response);
     const program = createProgram('', '');

@@ -65,7 +65,7 @@ describe('doctor report rendering', () => {
       issues: [],
     }));
 
-    expect(text).toContain('[OK] Daemon: running on port 19825');
+    expect(text).toContain('[OK] Daemon: running on port 9777');
     expect(text).toContain('(v1.7.9)');
     expect(text).toContain('[OK] Runtime: Cloak connected (v1.6.8)');
     expect(text).toContain('Everything looks good!');
@@ -84,7 +84,7 @@ describe('doctor report rendering', () => {
       issues: ['Stale daemon detected: daemon v1.7.6 != CLI v1.7.9.\n  Run: webcmd daemon restart'],
     }));
 
-    expect(text).toContain('[WARN] Daemon: running on port 19825 (v1.7.6, stale; CLI v1.7.9)');
+    expect(text).toContain('[WARN] Daemon: running on port 9777 (v1.7.6, stale; CLI v1.7.9)');
     expect(text).toContain('Run: webcmd daemon restart');
     expect(text).not.toContain('Everything looks good!');
   });
@@ -108,7 +108,7 @@ describe('doctor report rendering', () => {
       issues: ['Daemon is running but the Cloak runtime is not connected.'],
     }));
 
-    expect(text).toContain('[OK] Daemon: running on port 19825');
+    expect(text).toContain('[OK] Daemon: running on port 9777');
     expect(text).toContain('[MISSING] Runtime: Cloak not connected');
   });
 

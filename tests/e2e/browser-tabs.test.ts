@@ -33,7 +33,7 @@ type FakeDaemon = {
   maxInFlightExec: () => number;
 };
 
-const DAEMON_PORT = 19825;
+const DAEMON_PORT = 9777;
 
 function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));

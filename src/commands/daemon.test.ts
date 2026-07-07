@@ -54,7 +54,7 @@ describe('daemonStatus', () => {
       runtimeVersion: '1.6.8',
       pending: 0,
       memoryMB: 64,
-      port: 19825,
+      port: 9777,
     });
 
     await daemonStatus();
@@ -66,7 +66,7 @@ describe('daemonStatus', () => {
     expect(stdoutSpy).toHaveBeenCalledWith(expect.stringContaining('connected'));
     expect(stdoutSpy).toHaveBeenCalledWith(expect.stringContaining('v1.6.8'));
     expect(stdoutSpy).toHaveBeenCalledWith(expect.stringContaining('64 MB'));
-    expect(stdoutSpy).toHaveBeenCalledWith(expect.stringContaining('19825'));
+    expect(stdoutSpy).toHaveBeenCalledWith(expect.stringContaining('9777'));
   });
 
   it('shows disconnected when runtime is not connected', async () => {
@@ -79,7 +79,7 @@ describe('daemonStatus', () => {
       runtimeName: 'fake',
       pending: 0,
       memoryMB: 32,
-      port: 19825,
+      port: 9777,
     });
 
     await daemonStatus();
@@ -98,7 +98,7 @@ describe('daemonStatus', () => {
       runtimeVersion: undefined,
       pending: 0,
       memoryMB: 32,
-      port: 19825,
+      port: 9777,
     });
 
     await daemonStatus();
@@ -132,7 +132,7 @@ describe('daemonStatus runtime label states (#1575)', () => {
       daemonVersion: PKG_VERSION,
       pending: 0,
       memoryMB: 32,
-      port: 19825,
+      port: 9777,
       runtimeName: 'fake',
       ...extra,
     });
@@ -212,7 +212,7 @@ describe('daemonStop', () => {
       runtimeName: 'fake',
       pending: 0,
       memoryMB: 50,
-      port: 19825,
+      port: 9777,
     });
     requestDaemonShutdownMock.mockResolvedValue(true);
 
@@ -232,7 +232,7 @@ describe('daemonStop', () => {
       runtimeName: 'fake',
       pending: 0,
       memoryMB: 50,
-      port: 19825,
+      port: 9777,
     });
     requestDaemonShutdownMock.mockResolvedValue(false);
 
@@ -269,7 +269,7 @@ describe('daemonRestart', () => {
       profiles: [{ contextId: 'work', runtimeConnected: true, pending: 0 }],
       pending: 0,
       memoryMB: 50,
-      port: 19825,
+      port: 9777,
     });
     restartDaemonMock.mockResolvedValue({
       previousStatus: { daemonVersion: '1.7.6' },
@@ -285,7 +285,7 @@ describe('daemonRestart', () => {
         profiles: [{ contextId: 'work', runtimeConnected: true, pending: 0 }],
         pending: 0,
         memoryMB: 51,
-        port: 19825,
+        port: 9777,
       },
     });
 
@@ -293,7 +293,7 @@ describe('daemonRestart', () => {
 
     expect(restartDaemonMock).toHaveBeenCalledTimes(1);
     expect(stderrSpy).toHaveBeenCalledWith(expect.stringContaining('will disconnect 1 browser profile'));
-    expect(stderrSpy).toHaveBeenCalledWith(expect.stringContaining(`Daemon restarted on port 19825 (v${PKG_VERSION})`));
+    expect(stderrSpy).toHaveBeenCalledWith(expect.stringContaining(`Daemon restarted on port 9777 (v${PKG_VERSION})`));
     expect(stderrSpy).toHaveBeenCalledWith(expect.stringContaining('Runtime connected; 1 profile connected'));
   });
 
@@ -312,13 +312,13 @@ describe('daemonRestart', () => {
         runtimeName: 'fake',
         pending: 0,
         memoryMB: 51,
-        port: 19825,
+        port: 9777,
       },
     });
 
     await daemonRestart();
 
-    expect(stderrSpy).toHaveBeenCalledWith(expect.stringContaining(`Daemon started on port 19825 (v${PKG_VERSION})`));
+    expect(stderrSpy).toHaveBeenCalledWith(expect.stringContaining(`Daemon started on port 9777 (v${PKG_VERSION})`));
     expect(stderrSpy).toHaveBeenCalledWith(expect.stringContaining('Cloak runtime has not connected yet'));
   });
 
@@ -332,7 +332,7 @@ describe('daemonRestart', () => {
       runtimeName: 'fake',
       pending: 0,
       memoryMB: 50,
-      port: 19825,
+      port: 9777,
     });
     restartDaemonMock.mockResolvedValue({
       previousStatus: { daemonVersion: '1.7.6' },

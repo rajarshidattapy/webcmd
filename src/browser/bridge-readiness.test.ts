@@ -17,7 +17,7 @@ function status(runtimeConnected: boolean): DaemonStatus {
     runtimeName: 'fake',
     pending: 0,
     memoryMB: 0,
-    port: 19825,
+    port: 9777,
   };
 }
 

@@ -5,7 +5,7 @@
 import { CLI_COMMAND, DAEMON_HEADER_NAME, ENV_PREFIX, PRODUCT_DISPLAY_NAME } from './brand.js';
 
 /** Default daemon port for HTTP/WebSocket communication with browser extension */
-export const DEFAULT_DAEMON_PORT = 19825;
+export const DEFAULT_DAEMON_PORT = 9777;
 
 export function unsupportedDaemonPortEnvMessage(value?: string): string {
   const envName = `${ENV_PREFIX}_DAEMON_PORT`;

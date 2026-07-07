@@ -36,9 +36,9 @@ describe('node network proxy decisions', () => {
   it('bypasses proxies for loopback addresses', () => {
     const env = { https_proxy: 'http://127.0.0.1:7897', http_proxy: 'http://127.0.0.1:7897' };
 
-    expect(decideProxy(new URL('http://127.0.0.1:19825/status'), env)).toEqual({ mode: 'direct' });
-    expect(decideProxy(new URL('http://localhost:19825/status'), env)).toEqual({ mode: 'direct' });
-    expect(decideProxy(new URL('http://[::1]:19825/status'), env)).toEqual({ mode: 'direct' });
+    expect(decideProxy(new URL('http://127.0.0.1:9777/status'), env)).toEqual({ mode: 'direct' });
+    expect(decideProxy(new URL('http://localhost:9777/status'), env)).toEqual({ mode: 'direct' });
+    expect(decideProxy(new URL('http://[::1]:9777/status'), env)).toEqual({ mode: 'direct' });
   });
 
   it('honors NO_PROXY domain matches', () => {

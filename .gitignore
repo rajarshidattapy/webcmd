@@ -5,6 +5,7 @@ dist/
 .webcmd/
 .superpowers/
 .worktrees/
+.agents/
 .mcp.json
 *.log
 .DS_Store

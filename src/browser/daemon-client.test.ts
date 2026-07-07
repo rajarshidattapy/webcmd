@@ -33,7 +33,7 @@ describe('daemon-client', () => {
       runtimeVersion: '1.2.3',
       pending: 0,
       memoryMB: 32,
-      port: 19825,
+      port: 9777,
     };
     const fetchMock = vi.mocked(fetch);
     fetchMock.mockResolvedValue({
@@ -85,7 +85,7 @@ describe('daemon-client', () => {
       runtimeName: 'fake',
       pending: 0,
       memoryMB: 16,
-      port: 19825,
+      port: 9777,
     };
     vi.mocked(fetch).mockResolvedValue({
       ok: true,
@@ -105,7 +105,7 @@ describe('daemon-client', () => {
       runtimeVersion: '1.2.3',
       pending: 0,
       memoryMB: 32,
-      port: 19825,
+      port: 9777,
     };
     vi.mocked(fetch).mockResolvedValue({
       ok: true,
@@ -129,7 +129,7 @@ describe('daemon-client', () => {
       ],
       pending: 0,
       memoryMB: 32,
-      port: 19825,
+      port: 9777,
     };
     vi.mocked(fetch).mockResolvedValue({
       ok: true,
@@ -150,7 +150,7 @@ describe('daemon-client', () => {
         runtimeName: 'fake',
         pending: 0,
         memoryMB: 1,
-        port: 19825,
+        port: 9777,
       }),
     } as Response);
 
@@ -172,7 +172,7 @@ describe('daemon-client', () => {
         runtimeName: 'fake',
         pending: 0,
         memoryMB: 1,
-        port: 19825,
+        port: 9777,
       }),
     } as Response);
 
@@ -281,7 +281,7 @@ describe('daemon-client', () => {
           runtimeName: 'fake',
           pending: 0,
           memoryMB: 0,
-          port: 19825,
+          port: 9777,
         },
       },
       spawnedProcess: null,
@@ -323,13 +323,13 @@ describe('daemon-client', () => {
           runtimeName: 'fake',
           pending: 0,
           memoryMB: 0,
-          port: 19825,
+          port: 9777,
         },
       },
       spawnedProcess: null,
     });
     const refused = new TypeError('fetch failed');
-    (refused as { cause?: unknown }).cause = Object.assign(new Error('connect ECONNREFUSED 127.0.0.1:19825'), { code: 'ECONNREFUSED' });
+    (refused as { cause?: unknown }).cause = Object.assign(new Error('connect ECONNREFUSED 127.0.0.1:9777'), { code: 'ECONNREFUSED' });
     const fetchMock = vi.mocked(fetch);
     fetchMock
       .mockRejectedValueOnce(refused)
@@ -357,7 +357,7 @@ describe('daemon-client', () => {
           runtimeName: 'fake',
           pending: 0,
           memoryMB: 0,
-          port: 19825,
+          port: 9777,
         },
       },
       spawnedProcess: null,
