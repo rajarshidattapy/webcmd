@@ -111,4 +111,82 @@ describe('runHostedCli', () => {
     expect(result.exitCode).toBe(78);
     expect(stderr.text()).toMatch(/hosted mode has no local daemon/i);
   });
+
+  it('routes hosted browser positional commands through the cloud lifecycle', async () => {
+    const requests: Array<{ url: string; body?: unknown }> = [];
+    const stdout = sink();
+    const result = await runHostedCli(['--profile', 'default', 'browser', 'work', 'open', 'https://example.com', '--window', 'background'], {
+      config: makeHostedConfig({ apiBaseUrl: 'https://api.example.com', apiKey: 'key' }),
+      stdout: stdout.stream,
+      fetchImpl: async (url, init) => {
+        requests.push({
+          url: String(url),
+          body: init?.body ? JSON.parse(String(init.body)) as unknown : undefined,
+        });
+        if (String(url).endsWith('/runs')) {
+          return new Response(JSON.stringify({
+            ok: true,
+            run: {
+              executionId: 'exec_browser',
+              session: 'work',
+              profile: { id: 'profile_default', displayName: 'default' },
+            },
+          }), { status: 201 });
+        }
+        if (String(url).endsWith('/actions')) {
+          return new Response(JSON.stringify({
+            ok: true,
+            result: { url: 'https://example.com' },
+            columns: ['url'],
+            trace: null,
+          }), { status: 200 });
+        }
+        return new Response(JSON.stringify({
+          ok: true,
+          execution: { id: 'exec_browser', status: 'succeeded' },
+        }), { status: 200 });
+      },
+    });
+
+    expect(result).toEqual({ handled: true, exitCode: 0 });
+    expect(stdout.text()).toContain('https://example.com');
+    expect(requests).toEqual([
+      {
+        url: 'https://api.example.com/v1/browser/work/runs',
+        body: {
+          command: 'browser/open',
+          args: { url: 'https://example.com' },
+          profile: 'default',
+          windowMode: 'background',
+          trace: 'off',
+        },
+      },
+      {
+        url: 'https://api.example.com/v1/browser/work/runs/exec_browser/actions',
+        body: {
+          action: 'navigate',
+          args: { url: 'https://example.com' },
+          profile: 'default',
+        },
+      },
+      {
+        url: 'https://api.example.com/v1/browser/work/runs/exec_browser/finish',
+        body: {
+          status: 'succeeded',
+          profile: 'default',
+        },
+      },
+    ]);
+  });
+
+  it('rejects the retired hosted browser --session flag', async () => {
+    const stderr = sink();
+    const result = await runHostedCli(['browser', '--session', 'work', 'state'], {
+      config: makeHostedConfig({ apiBaseUrl: 'https://api.example.com', apiKey: 'key' }),
+      stderr: stderr.stream,
+    });
+
+    expect(result.exitCode).toBe(78);
+    expect(stderr.text()).toMatch(/session.*no longer a public option/i);
+  });
 });

@@ -1,5 +1,17 @@
 import { CliError, EXIT_CODES, type ExitCode } from '../errors.js';
-import type { HostedErrorResponse, HostedExecuteResponse, HostedManifest } from './types.js';
+import type {
+  HostedBrowserActionRequest,
+  HostedBrowserActionResponse,
+  HostedBrowserFinishRequest,
+  HostedBrowserFinishResponse,
+  HostedBrowserRunActionInput,
+  HostedBrowserRunActionResponse,
+  HostedBrowserRunRequest,
+  HostedBrowserRunResponse,
+  HostedErrorResponse,
+  HostedExecuteResponse,
+  HostedManifest,
+} from './types.js';
 
 export interface HostedClientOptions {
   apiBaseUrl: string;
@@ -47,6 +59,69 @@ export class HostedClient {
       method: 'POST',
       body: JSON.stringify(input),
     }) as Promise<HostedExecuteResponse>;
+  }
+
+  async startBrowserRun(session: string, input: HostedBrowserRunRequest): Promise<HostedBrowserRunResponse> {
+    return this.request(`/v1/browser/${encodeURIComponent(session)}/runs`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }) as Promise<HostedBrowserRunResponse>;
+  }
+
+  async browserAction(
+    session: string,
+    executionId: string,
+    input: HostedBrowserActionRequest,
+  ): Promise<HostedBrowserActionResponse> {
+    return this.request(`/v1/browser/${encodeURIComponent(session)}/runs/${encodeURIComponent(executionId)}/actions`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }) as Promise<HostedBrowserActionResponse>;
+  }
+
+  async finishBrowserRun(
+    session: string,
+    executionId: string,
+    input: HostedBrowserFinishRequest,
+  ): Promise<HostedBrowserFinishResponse> {
+    return this.request(`/v1/browser/${encodeURIComponent(session)}/runs/${encodeURIComponent(executionId)}/finish`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }) as Promise<HostedBrowserFinishResponse>;
+  }
+
+  async runBrowserAction(session: string, input: HostedBrowserRunActionInput): Promise<HostedBrowserRunActionResponse> {
+    const { command, trace, windowMode, action, profile, args } = input;
+    const run = await this.startBrowserRun(session, {
+      command,
+      args,
+      ...(profile !== undefined ? { profile } : {}),
+      ...(windowMode !== undefined ? { windowMode } : {}),
+      ...(trace !== undefined ? { trace } : {}),
+    });
+    try {
+      const actionResponse = await this.browserAction(session, run.run.executionId, {
+        action,
+        args,
+        ...(profile !== undefined ? { profile } : {}),
+      });
+      const finished = await this.finishBrowserRun(session, run.run.executionId, {
+        status: 'succeeded',
+        ...(profile !== undefined ? { profile } : {}),
+      });
+      return {
+        ...actionResponse,
+        run: run.run,
+        execution: finished.execution,
+      };
+    } catch (error) {
+      await this.finishBrowserRun(session, run.run.executionId, {
+        status: 'failed',
+        errorCode: error instanceof HostedClientError ? error.code : 'HOSTED_BROWSER_ACTION_FAILED',
+        ...(profile !== undefined ? { profile } : {}),
+      }).catch(() => undefined);
+      throw error;
+    }
   }
 
   private async request(path: string, init: RequestInit = {}): Promise<unknown> {
