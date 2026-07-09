@@ -2,18 +2,33 @@
 
 ## [0.2.3](https://github.com/agentrhq/webcmd/compare/webcmd-v0.2.2...webcmd-v0.2.3) (2026-07-09)
 
+### Highlights
+- Added four new e-commerce and booking adapters: Blinkit, Zepto, BigBasket, and Practo, enabling automated workflows for groceries, deliveries, and appointments.
+- Hardened the District adapter's checkout command to prevent incorrect seat selection, ensuring payment flows are initiated with the exact items requested.
 
-### Features
+### Improvements
+- Introduced a new plugin catalog to support community-developed commands, starting with the `skyscanner` plugin for flight searches.
+- The adapter-author skill now provides a more interactive scaffolding experience by asking for user use cases before recommending and generating subsequent commands.
+- Improved the release automation workflow to auto-generate more detailed release notes and update the `CHANGELOG.md` file.
 
-* add Adapter Additions and Improvements section to release notes and update generation logic ([3f89e8e](https://github.com/agentrhq/webcmd/commit/3f89e8e6714267c1d72a77eadffd75772af7aa0f))
-* add practo adapter ([21e12f7](https://github.com/agentrhq/webcmd/commit/21e12f74d0cb4eb94d1effe1fd391b7a7e702031))
-* implement automated CHANGELOG.md updates with enhanced release notes in release workflow ([f133e9e](https://github.com/agentrhq/webcmd/commit/f133e9ee601eb3eba39f1099b038e0b89b0ac05b))
+### Fixes
+None.
 
+### Adapters
+- **BigBasket**: Added the `bigbasket` adapter for online grocery shopping, with commands for `search`, `product`, `category`, `add-to-cart`, `cart`, and a review-only `checkout`.
+- **Blinkit**: Added a new `blinkit` adapter for grocery delivery, with commands for the full buying path: `login`, `search`, `product`, `add-to-cart`, `cart`, `checkout`, and `place-order`.
+- **District**: Hardened the `district checkout` command by adding two new guards. It now reconciles the selected seats with the requested seats to prevent auto-selection of extra tickets, and adds a final assertion on the review page to ensure order accuracy before payment.
+- **Practo**: Added a comprehensive `practo` adapter for healthcare appointments. It supports doctor discovery (`search`, `profile`), slot booking (`slots`, `book-preview`, `book-confirm`), and appointment management (`appointments`, `appointment`, `cancel`).
+- **Zepto**: Introduced the `zepto` adapter for quick commerce, including commands for `login`, `location`, `search`, `product`, `add-to-cart`, `cart`, `checkout`, and `place-order`.
 
-### Bug Fixes
+### Contributors
+- @ankitranjan7
+- @beubax
+- @ngaurav
+- @rishabhraj36
 
-* reconcile district checkout selection with the requested seats ([98c5a58](https://github.com/agentrhq/webcmd/commit/98c5a58306a7a4989d186db6a88a699d0fdd0706))
-* reconcile district checkout selection with the requested seats ([c90649b](https://github.com/agentrhq/webcmd/commit/c90649b1dc96c176c9007c725895f1a3cba1de92))
+### Reverts
+None.
 
 ## [0.2.2](https://github.com/agentrhq/webcmd/compare/webcmd-v0.2.1...webcmd-v0.2.2) (2026-07-09)
 
