@@ -59,17 +59,6 @@ None.
 - Hardened District checkout with clean-start sessions, a login gate before seat selection, stale-session refresh, and payment-handoff behavior.
 - Added the shared site-auth `openLogin(page)` hook for modal-based login flows such as District.
 
-### Contributors
-
-- @ankitranjan7
-- @beubax
-- @ngaurav
-- @nishant
-
-### Reverts
-
-None.
-
 ## [0.2.1](https://github.com/agentrhq/webcmd/compare/webcmd-v0.2.0...webcmd-v0.2.1) (2026-07-07)
 
 ### Highlights
@@ -94,17 +83,6 @@ None.
 
 - Added quote and bookmark counts to Twitter timeline output.
 - Hardened the Twitter tweet deletion flow.
-
-### Contributors
-
-- @askadityapandey
-- @beubax
-- @ngaurav
-- @rishabhraj36
-
-### Reverts
-
-None.
 
 ## [0.2.0](https://github.com/agentrhq/webcmd/compare/webcmd-v0.1.2...webcmd-v0.2.0) (2026-07-03)
 
@@ -136,16 +114,6 @@ None.
 - Cleaned up the adapter catalog by removing Chinese-first built-in adapters.
 - Removed references and tests for adapters that had already been deleted.
 
-### Contributors
-
-- @askadityapandey
-- @beubax
-- @ngaurav
-
-### Reverts
-
-None.
-
 ## [0.1.2](https://github.com/agentrhq/webcmd/compare/webcmd-v0.1.1...webcmd-v0.1.2) (2026-07-03)
 
 ### Highlights
@@ -162,44 +130,15 @@ None.
 - Parsed `npm pack` JSON correctly even when lifecycle output is present.
 - Relaxed the doctor runtime version warning.
 
-### Adapters
-
-None.
-
-### Contributors
-
-- @askadityapandey
-- @beubax
-
-### Reverts
-
-None.
-
 ## [0.1.1](https://github.com/agentrhq/webcmd/compare/webcmd-v0.1.0...webcmd-v0.1.1) (2026-07-03)
 
 ### Highlights
 
 - Published the next installable npm version after the initial package release.
 
-### Improvements
-
-None.
-
 ### Fixes
 
 - Released the next publishable npm version.
-
-### Adapters
-
-None.
-
-### Contributors
-
-- @beubax
-
-### Reverts
-
-None.
 
 ## 0.1.0 (2026-07-03)
 
@@ -215,18 +154,6 @@ None.
 - Introduced the adapter/plugin architecture and authoring workflow.
 - Added the Cloak-backed browser automation layer for inspecting pages, executing browser actions, capturing context, and exposing stable command surfaces.
 
-### Fixes
-
-None.
-
 ### Adapters
 
 - Introduced the adapter foundation for building repeatable command surfaces over target sites, apps, APIs, and tools.
-
-### Contributors
-
-- @beubax
-
-### Reverts
-
-None.
