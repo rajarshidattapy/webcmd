@@ -2,10 +2,12 @@
 
 ## [0.2.5](https://github.com/agentrhq/webcmd/compare/webcmd-v0.2.4...webcmd-v0.2.5) (2026-07-10)
 
+### Improvements
+- Added new commands for plugin discovery and management. Use `webcmd plugin search` to find new community plugins, and `webcmd plugin catalog` subcommands to manage the marketplace sources where `webcmd` searches.
+- Documentation has been updated to explain the new plugin monorepo model, where community adapters can be promoted directly into the main repository. This makes them easier to discover and install.
 
-### Bug Fixes
-
-* document plugin-monorepo promotion flow and catalog commands ([#63](https://github.com/agentrhq/webcmd/issues/63)) ([3d7da5a](https://github.com/agentrhq/webcmd/commit/3d7da5ae0d28a068691570827111ac2c06cceb4a))
+### Adapters
+- The BikeWale adapter has been promoted to the main repository as a community plugin.
 
 ## [0.2.4](https://github.com/agentrhq/webcmd/compare/webcmd-v0.2.3...webcmd-v0.2.4) (2026-07-10)
 
