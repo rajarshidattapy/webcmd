@@ -44,7 +44,7 @@ npx tsx src/main.ts <command>
 
 Electron desktop app adapters route through CDP against the running app. Make sure the app is open before invoking those commands.
 
-## Discover Installed Commands
+## Discover Commands
 
 Run commands instead of reading static docs:
 
@@ -57,7 +57,12 @@ webcmd <site> <command> --help
 
 Run `webcmd` with no arguments to see all available functions and installed site adapters. Do not hard-code adapter lists: `webcmd list -f json` is the source of truth and emits one entry per command with fields such as `{site, name, aliases, description, strategy, browser, args, columns}`.
 
-Before falling back to raw `webcmd browser` on high-change authenticated sites, check whether a site adapter already exposes the workflow.
+Use this fallback order:
+
+1. Run `webcmd list -f json` once.
+2. Check that result against the whole requested workflow, not only a named site. If one installed command covers it, use that command and stop discovery.
+3. If none covers it, derive a short plugin query from the missing site or capability and run `webcmd plugin search <query> -f json`. Preserve the user's term when practical: `find flights` becomes `flight`.
+4. If plugin search returns a match, offer `webcmd plugin install <installSource>`. If it returns no match and no error, raw `webcmd browser` is allowed. If it errors, report plugin discovery as unavailable possibly due to network permissions, and stop immediately.
 
 ## Universal Flags
 
@@ -128,10 +133,13 @@ webcmd plugin list [-f json]
 webcmd plugin update [name] | --all
 webcmd plugin uninstall <name>
 webcmd plugin create <name>
-webcmd plugin search [query]
+webcmd plugin search [query] -f json
+webcmd plugin catalog list -f json
+webcmd plugin catalog add <source>
+webcmd plugin catalog remove <id>
 ```
 
-Plugins are installable extensions pulled from git or local paths. Main-repo community CLIs are exposed through the root plugin catalog manifest, not bundled into npm's `clis/` set.
+Plugins are installable extensions pulled from git or local paths. Use `plugin search` for marketplace discovery and `plugin list` for already-installed plugins. Main-repo community CLIs are exposed through the root plugin catalog manifest, not bundled into npm's `clis/` set.
 
 > **Note:** The repository's `plugins/` directory is not shipped in the npm package. Find the required plugin with `webcmd plugin search`, then install its `installSource` with `webcmd plugin install <installSource>`.
 
