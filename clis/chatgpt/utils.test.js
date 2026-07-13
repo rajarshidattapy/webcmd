@@ -4,7 +4,7 @@ import path from 'node:path';
 import { JSDOM } from 'jsdom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ArgumentError, AuthRequiredError, CommandExecutionError } from '@agentrhq/webcmd/errors';
-import { __test__, getChatGPTDetailRows, getChatGPTImageAssets, getChatGPTResponsePairCounts, getChatGPTVisibleImageUrls, getCurrentChatGPTModel, getCurrentChatGPTTool, getVisibleMessages, isGenerating, navigateToProject, openChatGPTConversation, prepareChatGPTImagePaths, selectChatGPTModel, selectChatGPTTool, sendChatGPTMessage, uploadChatGPTImages, waitForChatGPTDetailRows, waitForChatGPTImages, waitForChatGPTResponse } from './utils.js';
+import { __test__, getChatGPTDetailRows, getChatGPTImageAssets, getChatGPTResponsePairCounts, getChatGPTVisibleImageUrls, getCurrentChatGPTModel, getCurrentChatGPTTool, getVisibleMessages, isGenerating, navigateToProject, openChatGPTConversation, prepareChatGPTImagePaths, selectChatGPTModel, selectChatGPTTool, sendChatGPTMessage, uploadChatGPTImages, waitForChatGPTDeepResearchResult, waitForChatGPTDetailRows, waitForChatGPTImages, waitForChatGPTResponse } from './utils.js';
 
 const tempDirs = [];
 
@@ -190,6 +190,37 @@ function makeDeepResearchPayload(report = makeDeepResearchReport(), { conversati
     return payload;
 }
 
+function makeDeepResearchProgressPayload(status = 'waiting_for_user_response_on_plan') {
+    return {
+        mapping: {
+            progress_node: {
+                message: {
+                    metadata: {
+                        chatgpt_sdk: {
+                            widget_state: JSON.stringify({
+                                status,
+                                waiting_for_user_response_on_plan_until: '2026-07-02T02:29:48.298274Z',
+                                plan: {
+                                    plan_id: 'plan-demo',
+                                    title: 'Research plan',
+                                    steps: [{ id: 'step-1', title: 'Collect sources', status: 'pending' }],
+                                },
+                                step_statuses_by_plan: { 'step-1': 'pending' },
+                            }),
+                            response_metadata: {
+                                async_task_conversation_id: 'async-conversation-123',
+                                'openai/widgetSessionId': 'widget-session-123',
+                                'openai/asyncStatus': 7,
+                                venus_message_type: 'initial_loading_message',
+                            },
+                        },
+                    },
+                },
+            },
+        },
+    };
+}
+
 describe('chatgpt deep research result extraction', () => {
     it('extracts report markdown and sources from conversation widget_state', () => {
         const result = __test__.extractDeepResearchFromConversationPayload(makeDeepResearchPayload());
@@ -253,8 +284,149 @@ describe('chatgpt deep research result extraction', () => {
             .toThrow(CommandExecutionError);
     });
 
+    it('extracts waiting-for-user progress from widget metadata without a report', () => {
+        const result = __test__.extractDeepResearchFromConversationPayload(makeDeepResearchProgressPayload());
+
+        expect(result).toMatchObject({
+            status: 'waiting_for_user',
+            method: 'conversation-widget-progress',
+            asyncTaskConversationId: 'async-conversation-123',
+            widgetSessionId: 'widget-session-123',
+            asyncStatus: 7,
+            venusMessageType: 'initial_loading_message',
+            venusStatus: 'waiting_for_user_response_on_plan',
+            waitingForUserUntil: '2026-07-02T02:29:48.298274Z',
+            planId: 'plan-demo',
+            planTitle: 'Research plan',
+        });
+        expect(result.report).toBe('');
+        expect(result.progress.planSteps).toEqual([
+            { id: 'step-1', title: 'Collect sources', status: 'pending' },
+        ]);
+    });
+
+    it('ignores unrelated SDK response metadata without Deep Research identity', () => {
+        const payload = {
+            mapping: {
+                app_widget: {
+                    message: {
+                        metadata: {
+                            chatgpt_sdk: {
+                                response_metadata: {
+                                    'openai/widgetSessionId': 'unrelated-widget',
+                                    'openai/asyncStatus': 1,
+                                },
+                            },
+                        },
+                    },
+                },
+            },
+        };
+
+        expect(__test__.extractDeepResearchFromConversationPayload(payload)).toBeNull();
+    });
+
+    it('prefers the current Deep Research progress over stale actionable progress', () => {
+        const stale = makeDeepResearchProgressPayload().mapping.progress_node;
+        stale.message.create_time = 1;
+        const current = makeDeepResearchProgressPayload('running').mapping.progress_node;
+        current.message.create_time = 2;
+        const payload = {
+            current_node: 'running_node',
+            mapping: {
+                waiting_node: { ...stale, parent: null },
+                running_node: { ...current, parent: 'waiting_node' },
+            },
+        };
+
+        expect(__test__.extractDeepResearchFromConversationPayload(payload)).toMatchObject({
+            status: 'running',
+            venusStatus: 'running',
+        });
+    });
+
     it('ignores short widget previews that are not completed reports', () => {
         expect(__test__.extractDeepResearchFromConversationPayload(makeDeepResearchPayload('short preview'))).toBeNull();
+    });
+
+    it('stops waiting immediately when widget state needs user input', async () => {
+        const page = {
+            getCookies: vi.fn().mockResolvedValue([]),
+            wait: vi.fn().mockResolvedValue(undefined),
+            sleep: vi.fn().mockResolvedValue(undefined),
+            evaluate: vi.fn((script) => {
+                const source = String(script);
+                if (source.includes("document.querySelectorAll('iframe')")) {
+                    return Promise.resolve({
+                        url: 'https://chatgpt.com/c/requested123',
+                        title: 'ChatGPT',
+                        iframes: [],
+                        deepResearchIframe: null,
+                    });
+                }
+                if (source.includes('Stop generating') || source.includes('Thinking')) return Promise.resolve(false);
+                if (source.includes('/backend-api/conversation/')) {
+                    return Promise.resolve({
+                        ok: true,
+                        status: 200,
+                        contentType: 'application/json',
+                        text: JSON.stringify(makeDeepResearchProgressPayload()),
+                    });
+                }
+                return Promise.resolve(undefined);
+            }),
+        };
+
+        const result = await waitForChatGPTDeepResearchResult(page, {
+            conversationId: 'requested123',
+            timeoutSeconds: 180,
+            stableSeconds: 3,
+        });
+
+        expect(result.status).toBe('waiting_for_user');
+        expect(result.venusStatus).toBe('waiting_for_user_response_on_plan');
+        expect(page.sleep).not.toHaveBeenCalled();
+    });
+
+    it('continues waiting through a transient missing state before progress appears', async () => {
+        let conversationReads = 0;
+        const page = {
+            getCookies: vi.fn().mockResolvedValue([]),
+            wait: vi.fn().mockResolvedValue(undefined),
+            sleep: vi.fn().mockResolvedValue(undefined),
+            evaluate: vi.fn((script) => {
+                const source = String(script);
+                if (source.includes("document.querySelectorAll('iframe')")) {
+                    return Promise.resolve({
+                        url: 'https://chatgpt.com/c/requested123',
+                        title: 'ChatGPT',
+                        iframes: [],
+                        deepResearchIframe: null,
+                    });
+                }
+                if (source.includes('Stop generating') || source.includes('Thinking')) return Promise.resolve(false);
+                if (source.includes('/backend-api/conversation/')) {
+                    conversationReads += 1;
+                    return Promise.resolve({
+                        ok: true,
+                        status: 200,
+                        contentType: 'application/json',
+                        text: JSON.stringify(conversationReads === 1 ? { mapping: {} } : makeDeepResearchProgressPayload()),
+                    });
+                }
+                return Promise.resolve(undefined);
+            }),
+        };
+
+        const result = await waitForChatGPTDeepResearchResult(page, {
+            conversationId: 'requested123',
+            timeoutSeconds: 180,
+            stableSeconds: 3,
+        });
+
+        expect(result.status).toBe('waiting_for_user');
+        expect(page.sleep).toHaveBeenCalledWith(3);
+        expect(conversationReads).toBe(2);
     });
 });
 
