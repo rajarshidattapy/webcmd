@@ -189,4 +189,19 @@ describe('runHostedCli', () => {
     expect(result.exitCode).toBe(78);
     expect(stderr.text()).toMatch(/session.*no longer a public option/i);
   });
+
+  it('rejects browser bind before making a hosted request', async () => {
+    const stderr = sink();
+    const fetchImpl = vi.fn<typeof fetch>();
+
+    const result = await runHostedCli(['browser', 'work', 'bind'], {
+      config: makeHostedConfig({ apiBaseUrl: 'https://api.example.com', apiKey: 'key' }),
+      stderr: stderr.stream,
+      fetchImpl,
+    });
+
+    expect(result).toEqual({ handled: true, exitCode: 78 });
+    expect(stderr.text()).toMatch(/browser bind is not supported in hosted mode/i);
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
 });

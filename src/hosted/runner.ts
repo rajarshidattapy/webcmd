@@ -221,7 +221,10 @@ function parseBrowserLeaf(leaf: string, argv: string[]): {
   const parsed = splitOptions(argv);
   switch (leaf) {
     case 'bind':
-      return { commandName: 'bind', action: 'bind', args: {} };
+      throw new ConfigError(
+        'Browser bind is not supported in hosted mode.',
+        'Use browser state or browser tabs to inspect the active hosted page.',
+      );
     case 'unbind':
     case 'close':
       return { commandName: leaf, action: 'close-window', args: {} };

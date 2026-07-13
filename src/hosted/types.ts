@@ -43,7 +43,6 @@ export interface HostedExecuteResponse {
 
 export type HostedBrowserActionName =
   | 'back'
-  | 'bind'
   | 'click'
   | 'close-window'
   | 'console'
