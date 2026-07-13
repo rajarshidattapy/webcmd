@@ -49,14 +49,13 @@ Electron desktop app adapters route through CDP against the running app. Make su
 Run commands instead of reading static docs:
 
 ```bash
-webcmd list
+webcmd
 webcmd list -f json
-webcmd list | grep -i github
 webcmd <site> --help
 webcmd <site> <command> --help
 ```
 
-Do not hard-code adapter lists. `webcmd list -f json` is the source of truth and emits one entry per command with fields such as `{site, name, aliases, description, strategy, browser, args, columns}`.
+Run `webcmd` with no arguments to see all installed app and site adapters. Do not hard-code adapter lists: `webcmd list -f json` is the source of truth and emits one entry per command with fields such as `{site, name, aliases, description, strategy, browser, args, columns}`.
 
 Before falling back to raw `webcmd browser` on high-change authenticated sites, check whether a site adapter already exposes the workflow.
 
