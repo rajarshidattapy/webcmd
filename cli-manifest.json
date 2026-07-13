@@ -2024,6 +2024,228 @@
     "sourceFile": "bbc/topic.js"
   },
   {
+    "site": "bigbasket",
+    "name": "add-to-cart",
+    "description": "Add a BigBasket product to cart",
+    "access": "write",
+    "domain": "www.bigbasket.com",
+    "strategy": "cookie",
+    "browser": true,
+    "args": [
+      {
+        "name": "product",
+        "type": "str",
+        "required": true,
+        "positional": true,
+        "help": "Product ID or URL"
+      },
+      {
+        "name": "quantity",
+        "type": "int",
+        "default": 1,
+        "required": false,
+        "help": "Quantity to add (max 20)"
+      }
+    ],
+    "columns": [
+      "ok",
+      "product_id",
+      "quantity",
+      "url",
+      "message"
+    ],
+    "type": "js",
+    "modulePath": "bigbasket/add-to-cart.js",
+    "sourceFile": "bigbasket/add-to-cart.js",
+    "navigateBefore": "https://www.bigbasket.com"
+  },
+  {
+    "site": "bigbasket",
+    "name": "cart",
+    "description": "Read BigBasket cart line items",
+    "access": "read",
+    "domain": "www.bigbasket.com",
+    "strategy": "cookie",
+    "browser": true,
+    "args": [],
+    "columns": [
+      "product_id",
+      "title",
+      "quantity",
+      "price",
+      "line_total",
+      "availability",
+      "url"
+    ],
+    "type": "js",
+    "modulePath": "bigbasket/cart.js",
+    "sourceFile": "bigbasket/cart.js",
+    "navigateBefore": "https://www.bigbasket.com"
+  },
+  {
+    "site": "bigbasket",
+    "name": "category",
+    "description": "Read BigBasket category product cards",
+    "access": "read",
+    "domain": "www.bigbasket.com",
+    "strategy": "cookie",
+    "browser": true,
+    "args": [
+      {
+        "name": "category",
+        "type": "str",
+        "required": true,
+        "positional": true,
+        "help": "Category URL or slug"
+      },
+      {
+        "name": "limit",
+        "type": "int",
+        "default": 20,
+        "required": false,
+        "help": "Maximum products to return (max 50)"
+      }
+    ],
+    "columns": [
+      "rank",
+      "product_id",
+      "title",
+      "brand",
+      "pack_size",
+      "price",
+      "mrp",
+      "discount",
+      "availability",
+      "url"
+    ],
+    "type": "js",
+    "modulePath": "bigbasket/category.js",
+    "sourceFile": "bigbasket/category.js",
+    "navigateBefore": "https://www.bigbasket.com"
+  },
+  {
+    "site": "bigbasket",
+    "name": "checkout",
+    "description": "Open BigBasket checkout review without placing an order",
+    "access": "write",
+    "domain": "www.bigbasket.com",
+    "strategy": "cookie",
+    "browser": true,
+    "args": [],
+    "columns": [
+      "ok",
+      "stage",
+      "cart_total",
+      "address_ready",
+      "delivery_ready",
+      "payment_ready",
+      "next_action",
+      "url"
+    ],
+    "type": "js",
+    "modulePath": "bigbasket/checkout.js",
+    "sourceFile": "bigbasket/checkout.js",
+    "navigateBefore": "https://www.bigbasket.com"
+  },
+  {
+    "site": "bigbasket",
+    "name": "location",
+    "description": "Show the selected BigBasket delivery location",
+    "access": "read",
+    "domain": "www.bigbasket.com",
+    "strategy": "cookie",
+    "browser": true,
+    "args": [],
+    "columns": [
+      "selected",
+      "label",
+      "area",
+      "city",
+      "pincode",
+      "source"
+    ],
+    "type": "js",
+    "modulePath": "bigbasket/location.js",
+    "sourceFile": "bigbasket/location.js",
+    "navigateBefore": "https://www.bigbasket.com"
+  },
+  {
+    "site": "bigbasket",
+    "name": "product",
+    "description": "Read BigBasket product details",
+    "access": "read",
+    "domain": "www.bigbasket.com",
+    "strategy": "cookie",
+    "browser": true,
+    "args": [
+      {
+        "name": "product",
+        "type": "str",
+        "required": true,
+        "positional": true,
+        "help": "Product ID or URL"
+      }
+    ],
+    "columns": [
+      "product_id",
+      "title",
+      "brand",
+      "pack_size",
+      "price",
+      "mrp",
+      "discount",
+      "availability",
+      "delivery",
+      "image_url",
+      "url"
+    ],
+    "type": "js",
+    "modulePath": "bigbasket/product.js",
+    "sourceFile": "bigbasket/product.js",
+    "navigateBefore": "https://www.bigbasket.com"
+  },
+  {
+    "site": "bigbasket",
+    "name": "search",
+    "description": "Search BigBasket products",
+    "access": "read",
+    "domain": "www.bigbasket.com",
+    "strategy": "cookie",
+    "browser": true,
+    "args": [
+      {
+        "name": "query",
+        "type": "str",
+        "required": true,
+        "positional": true,
+        "help": "Search query"
+      },
+      {
+        "name": "limit",
+        "type": "int",
+        "default": 20,
+        "required": false,
+        "help": "Maximum products to return (max 50)"
+      }
+    ],
+    "columns": [
+      "rank",
+      "product_id",
+      "title",
+      "brand",
+      "pack_size",
+      "price",
+      "mrp",
+      "discount",
+      "availability",
+      "url"
+    ],
+    "type": "js",
+    "modulePath": "bigbasket/search.js",
+    "sourceFile": "bigbasket/search.js",
+    "navigateBefore": "https://www.bigbasket.com"
+  },
+  {
     "site": "binance",
     "name": "asks",
     "description": "Order book ask prices for a trading pair",
@@ -2369,6 +2591,295 @@
     "type": "js",
     "modulePath": "binance/trades.js",
     "sourceFile": "binance/trades.js"
+  },
+  {
+    "site": "blinkit",
+    "name": "add-to-cart",
+    "description": "Add a Blinkit product to cart",
+    "access": "write",
+    "domain": "blinkit.com",
+    "strategy": "cookie",
+    "browser": true,
+    "args": [
+      {
+        "name": "productId",
+        "type": "str",
+        "required": true,
+        "positional": true,
+        "help": "Blinkit product id"
+      },
+      {
+        "name": "quantity",
+        "type": "int",
+        "default": 1,
+        "required": false,
+        "help": "Quantity to add (default 1, max 12)"
+      },
+      {
+        "name": "lat",
+        "type": "str",
+        "required": false,
+        "help": "Delivery latitude (defaults to current Blinkit browser location)"
+      },
+      {
+        "name": "lon",
+        "type": "str",
+        "required": false,
+        "help": "Delivery longitude (defaults to current Blinkit browser location)"
+      }
+    ],
+    "columns": [
+      "status",
+      "productId",
+      "quantity",
+      "itemCount",
+      "itemsTotal",
+      "payable",
+      "message"
+    ],
+    "type": "js",
+    "modulePath": "blinkit/add-to-cart.js",
+    "sourceFile": "blinkit/add-to-cart.js",
+    "navigateBefore": false
+  },
+  {
+    "site": "blinkit",
+    "name": "cart",
+    "description": "Show the current Blinkit cart",
+    "access": "read",
+    "domain": "blinkit.com",
+    "strategy": "cookie",
+    "browser": true,
+    "args": [],
+    "columns": [
+      "status",
+      "productId",
+      "name",
+      "variant",
+      "price",
+      "quantity",
+      "total",
+      "itemCount",
+      "payable",
+      "cartState"
+    ],
+    "type": "js",
+    "modulePath": "blinkit/cart.js",
+    "sourceFile": "blinkit/cart.js",
+    "navigateBefore": false
+  },
+  {
+    "site": "blinkit",
+    "name": "checkout",
+    "description": "Review Blinkit checkout totals and blockers without placing an order",
+    "access": "read",
+    "domain": "blinkit.com",
+    "strategy": "cookie",
+    "browser": true,
+    "args": [],
+    "columns": [
+      "status",
+      "itemCount",
+      "itemsTotal",
+      "deliveryCharge",
+      "handlingCharge",
+      "payable",
+      "cartState",
+      "checkoutBlocked",
+      "validations"
+    ],
+    "type": "js",
+    "modulePath": "blinkit/checkout.js",
+    "sourceFile": "blinkit/checkout.js",
+    "navigateBefore": false,
+    "defaultWindowMode": "foreground"
+  },
+  {
+    "site": "blinkit",
+    "name": "location",
+    "description": "Show the selected Blinkit delivery location",
+    "access": "read",
+    "domain": "blinkit.com",
+    "strategy": "cookie",
+    "browser": true,
+    "args": [],
+    "columns": [
+      "selected",
+      "label",
+      "area",
+      "city",
+      "pincode",
+      "hasCoordinates",
+      "source"
+    ],
+    "type": "js",
+    "modulePath": "blinkit/location.js",
+    "sourceFile": "blinkit/location.js",
+    "navigateBefore": "https://blinkit.com"
+  },
+  {
+    "site": "blinkit",
+    "name": "login",
+    "description": "Open Blinkit login and wait until the browser session is authenticated",
+    "access": "write",
+    "domain": "blinkit.com",
+    "strategy": "cookie",
+    "browser": true,
+    "args": [
+      {
+        "name": "timeout",
+        "type": "int",
+        "default": 300,
+        "required": false,
+        "help": "Maximum seconds to wait for the user to finish login"
+      }
+    ],
+    "columns": [
+      "status",
+      "logged_in",
+      "phone",
+      "user_id"
+    ],
+    "type": "js",
+    "modulePath": "blinkit/auth.js",
+    "sourceFile": "blinkit/auth.js",
+    "navigateBefore": false,
+    "siteSession": "persistent",
+    "defaultWindowMode": "foreground"
+  },
+  {
+    "site": "blinkit",
+    "name": "place-order",
+    "description": "Submit the visible Blinkit final order/payment action. Requires --confirm.",
+    "access": "write",
+    "domain": "blinkit.com",
+    "strategy": "cookie",
+    "browser": true,
+    "args": [
+      {
+        "name": "confirm",
+        "type": "bool",
+        "default": false,
+        "required": false,
+        "help": "Required acknowledgement that this may place/pay for a real order"
+      }
+    ],
+    "columns": [
+      "status",
+      "confirmed",
+      "itemCount",
+      "payable",
+      "orderId",
+      "url",
+      "message"
+    ],
+    "type": "js",
+    "modulePath": "blinkit/place-order.js",
+    "sourceFile": "blinkit/place-order.js",
+    "navigateBefore": false,
+    "defaultWindowMode": "foreground"
+  },
+  {
+    "site": "blinkit",
+    "name": "product",
+    "description": "Read Blinkit product details for a delivery location",
+    "access": "read",
+    "domain": "blinkit.com",
+    "strategy": "cookie",
+    "browser": true,
+    "args": [
+      {
+        "name": "productId",
+        "type": "str",
+        "required": true,
+        "positional": true,
+        "help": "Blinkit product id"
+      },
+      {
+        "name": "lat",
+        "type": "str",
+        "required": false,
+        "help": "Delivery latitude (defaults to current Blinkit browser location)"
+      },
+      {
+        "name": "lon",
+        "type": "str",
+        "required": false,
+        "help": "Delivery longitude (defaults to current Blinkit browser location)"
+      }
+    ],
+    "columns": [
+      "productId",
+      "name",
+      "brand",
+      "variant",
+      "price",
+      "mrp",
+      "currency",
+      "inventory",
+      "available",
+      "imageUrl",
+      "url"
+    ],
+    "type": "js",
+    "modulePath": "blinkit/product.js",
+    "sourceFile": "blinkit/product.js",
+    "navigateBefore": false
+  },
+  {
+    "site": "blinkit",
+    "name": "search",
+    "description": "Search Blinkit products for a delivery location",
+    "access": "read",
+    "domain": "blinkit.com",
+    "strategy": "cookie",
+    "browser": true,
+    "args": [
+      {
+        "name": "query",
+        "type": "str",
+        "required": true,
+        "positional": true,
+        "help": "Search keyword"
+      },
+      {
+        "name": "limit",
+        "type": "int",
+        "default": 20,
+        "required": false,
+        "help": "Max results (max 48)"
+      },
+      {
+        "name": "lat",
+        "type": "str",
+        "required": false,
+        "help": "Delivery latitude (defaults to current Blinkit browser location)"
+      },
+      {
+        "name": "lon",
+        "type": "str",
+        "required": false,
+        "help": "Delivery longitude (defaults to current Blinkit browser location)"
+      }
+    ],
+    "columns": [
+      "rank",
+      "productId",
+      "name",
+      "brand",
+      "variant",
+      "price",
+      "mrp",
+      "currency",
+      "inventory",
+      "available",
+      "imageUrl",
+      "url"
+    ],
+    "type": "js",
+    "modulePath": "blinkit/search.js",
+    "sourceFile": "blinkit/search.js",
+    "navigateBefore": false
   },
   {
     "site": "bloomberg",
@@ -16115,6 +16626,426 @@
     "siteSession": "persistent"
   },
   {
+    "site": "practo",
+    "name": "appointment",
+    "description": "Show logged-in Practo Drive appointment details",
+    "access": "read",
+    "domain": "drive.practo.com",
+    "strategy": "cookie",
+    "browser": true,
+    "args": [
+      {
+        "name": "appointment_id",
+        "type": "str",
+        "required": true,
+        "positional": true,
+        "help": "Appointment id from `practo appointments`"
+      }
+    ],
+    "columns": [
+      "appointment_id",
+      "status",
+      "summary"
+    ],
+    "type": "js",
+    "modulePath": "practo/appointment.js",
+    "sourceFile": "practo/appointment.js",
+    "navigateBefore": false,
+    "siteSession": "persistent"
+  },
+  {
+    "site": "practo",
+    "name": "appointments",
+    "description": "List logged-in Practo Drive appointments",
+    "access": "read",
+    "domain": "drive.practo.com",
+    "strategy": "cookie",
+    "browser": true,
+    "args": [],
+    "columns": [
+      "appointment_id",
+      "doctor",
+      "practice",
+      "time",
+      "status"
+    ],
+    "type": "js",
+    "modulePath": "practo/appointments.js",
+    "sourceFile": "practo/appointments.js",
+    "navigateBefore": false,
+    "siteSession": "persistent"
+  },
+  {
+    "site": "practo",
+    "name": "book-confirm",
+    "description": "Confirm a Practo clinic visit booking after explicit confirmation",
+    "access": "write",
+    "domain": "www.practo.com",
+    "strategy": "cookie",
+    "browser": true,
+    "args": [
+      {
+        "name": "practice_doctor_id",
+        "type": "str",
+        "required": true,
+        "positional": true,
+        "help": "Practo practice_doctor_id"
+      },
+      {
+        "name": "time",
+        "type": "str",
+        "required": true,
+        "help": "Slot time YYYY-MM-DD HH:mm:ss"
+      },
+      {
+        "name": "profile-url",
+        "type": "str",
+        "required": false,
+        "help": "Doctor profile_url from `practo search`, used to build a canonical booking URL"
+      },
+      {
+        "name": "confirm",
+        "type": "boolean",
+        "default": false,
+        "required": false,
+        "help": "Required. Set --confirm true to create the appointment."
+      }
+    ],
+    "columns": [
+      "status",
+      "practice_doctor_id",
+      "time",
+      "url"
+    ],
+    "type": "js",
+    "modulePath": "practo/book-confirm.js",
+    "sourceFile": "practo/book-confirm.js",
+    "navigateBefore": false,
+    "siteSession": "persistent",
+    "defaultWindowMode": "foreground"
+  },
+  {
+    "site": "practo",
+    "name": "book-preview",
+    "description": "Preview Practo booking details for a selected slot without confirming",
+    "access": "read",
+    "domain": "www.practo.com",
+    "strategy": "cookie",
+    "browser": true,
+    "args": [
+      {
+        "name": "practice_doctor_id",
+        "type": "str",
+        "required": true,
+        "positional": true,
+        "help": "Practo practice_doctor_id"
+      },
+      {
+        "name": "time",
+        "type": "str",
+        "required": true,
+        "help": "Slot time YYYY-MM-DD HH:mm:ss"
+      },
+      {
+        "name": "profile-url",
+        "type": "str",
+        "required": false,
+        "help": "Doctor profile_url from `practo search`, used to build a canonical booking URL"
+      }
+    ],
+    "columns": [
+      "practice_doctor_id",
+      "time",
+      "amount",
+      "prepaid",
+      "payment_mode",
+      "requires_payment",
+      "confirm_button",
+      "booking_url"
+    ],
+    "type": "js",
+    "modulePath": "practo/book-preview.js",
+    "sourceFile": "practo/book-preview.js",
+    "navigateBefore": false,
+    "siteSession": "persistent"
+  },
+  {
+    "site": "practo",
+    "name": "booking-link",
+    "description": "Build a Practo booking URL for a selected slot without confirming it",
+    "access": "read",
+    "domain": "www.practo.com",
+    "strategy": "cookie",
+    "browser": true,
+    "args": [
+      {
+        "name": "practice_doctor_id",
+        "type": "str",
+        "required": true,
+        "positional": true,
+        "help": "Practo practice_doctor_id"
+      },
+      {
+        "name": "time",
+        "type": "str",
+        "required": true,
+        "help": "Slot time YYYY-MM-DD HH:mm:ss"
+      },
+      {
+        "name": "profile-url",
+        "type": "str",
+        "required": false,
+        "help": "Doctor profile_url from `practo search`, used to build a canonical booking URL"
+      }
+    ],
+    "columns": [
+      "practice_doctor_id",
+      "time",
+      "booking_url"
+    ],
+    "type": "js",
+    "modulePath": "practo/booking-link.js",
+    "sourceFile": "practo/booking-link.js",
+    "navigateBefore": false
+  },
+  {
+    "site": "practo",
+    "name": "cancel",
+    "description": "Cancel a logged-in Practo Drive appointment after explicit confirmation",
+    "access": "write",
+    "domain": "drive.practo.com",
+    "strategy": "cookie",
+    "browser": true,
+    "args": [
+      {
+        "name": "appointment_id",
+        "type": "str",
+        "required": true,
+        "positional": true,
+        "help": "Appointment id from `practo appointments`"
+      },
+      {
+        "name": "confirm",
+        "type": "boolean",
+        "default": false,
+        "required": false,
+        "help": "Required. Set --confirm true to cancel the appointment."
+      }
+    ],
+    "columns": [
+      "status",
+      "appointment_id"
+    ],
+    "type": "js",
+    "modulePath": "practo/cancel.js",
+    "sourceFile": "practo/cancel.js",
+    "navigateBefore": false,
+    "siteSession": "persistent",
+    "defaultWindowMode": "foreground"
+  },
+  {
+    "site": "practo",
+    "name": "contact",
+    "description": "Get Practo virtual contact number for a practice_doctor_id",
+    "access": "read",
+    "domain": "www.practo.com",
+    "strategy": "cookie",
+    "browser": true,
+    "args": [
+      {
+        "name": "practice_doctor_id",
+        "type": "str",
+        "required": true,
+        "positional": true,
+        "help": "Practo practice_doctor_id from search results"
+      }
+    ],
+    "columns": [
+      "practice_doctor_id",
+      "phone",
+      "raw"
+    ],
+    "type": "js",
+    "modulePath": "practo/contact.js",
+    "sourceFile": "practo/contact.js",
+    "navigateBefore": false
+  },
+  {
+    "site": "practo",
+    "name": "login",
+    "description": "Open Practo login and wait until the browser session is authenticated",
+    "access": "write",
+    "domain": "www.practo.com",
+    "strategy": "cookie",
+    "browser": true,
+    "args": [
+      {
+        "name": "timeout",
+        "type": "int",
+        "default": 300,
+        "required": false,
+        "help": "Maximum seconds to wait for the user to finish login"
+      }
+    ],
+    "columns": [
+      "status",
+      "logged_in",
+      "site",
+      "name"
+    ],
+    "type": "js",
+    "modulePath": "practo/login.js",
+    "sourceFile": "practo/login.js",
+    "navigateBefore": false,
+    "siteSession": "persistent",
+    "defaultWindowMode": "foreground"
+  },
+  {
+    "site": "practo",
+    "name": "profile",
+    "description": "Read public details from a Practo doctor profile URL",
+    "access": "read",
+    "domain": "www.practo.com",
+    "strategy": "cookie",
+    "browser": true,
+    "args": [
+      {
+        "name": "url",
+        "type": "str",
+        "required": true,
+        "positional": true,
+        "help": "Practo doctor profile URL"
+      }
+    ],
+    "columns": [
+      "name",
+      "specialty",
+      "experience",
+      "fee",
+      "profile_url"
+    ],
+    "type": "js",
+    "modulePath": "practo/profile.js",
+    "sourceFile": "practo/profile.js",
+    "navigateBefore": false
+  },
+  {
+    "site": "practo",
+    "name": "search",
+    "description": "Search Practo doctors by specialty, city, and optional locality",
+    "access": "read",
+    "domain": "www.practo.com",
+    "strategy": "cookie",
+    "browser": true,
+    "args": [
+      {
+        "name": "specialty",
+        "type": "str",
+        "required": true,
+        "positional": true,
+        "help": "Doctor specialty, e.g. orthopedist or dermatologist"
+      },
+      {
+        "name": "city",
+        "type": "str",
+        "default": "bangalore",
+        "required": false,
+        "help": "City, e.g. bangalore"
+      },
+      {
+        "name": "locality",
+        "type": "str",
+        "required": false,
+        "help": "Optional locality, e.g. indiranagar"
+      },
+      {
+        "name": "limit",
+        "type": "int",
+        "default": 10,
+        "required": false,
+        "help": "Max doctors to return (1-25)"
+      }
+    ],
+    "columns": [
+      "rank",
+      "practice_doctor_id",
+      "doctor_id",
+      "practice_id",
+      "name",
+      "specialty",
+      "experience_years",
+      "locality",
+      "clinic",
+      "fee",
+      "next_available",
+      "profile_url"
+    ],
+    "type": "js",
+    "modulePath": "practo/search.js",
+    "sourceFile": "practo/search.js",
+    "navigateBefore": false
+  },
+  {
+    "site": "practo",
+    "name": "slots",
+    "description": "List available Practo appointment slots for a practice_doctor_id",
+    "access": "read",
+    "domain": "www.practo.com",
+    "strategy": "cookie",
+    "browser": true,
+    "args": [
+      {
+        "name": "practice_doctor_id",
+        "type": "str",
+        "required": true,
+        "positional": true,
+        "help": "Practo practice_doctor_id from search results"
+      },
+      {
+        "name": "limit",
+        "type": "int",
+        "default": 20,
+        "required": false,
+        "help": "Max slots to return (1-25)"
+      }
+    ],
+    "columns": [
+      "practice_doctor_id",
+      "time",
+      "available",
+      "amount",
+      "prepaid",
+      "appointment_token"
+    ],
+    "type": "js",
+    "modulePath": "practo/slots.js",
+    "sourceFile": "practo/slots.js",
+    "navigateBefore": false
+  },
+  {
+    "site": "practo",
+    "name": "whoami",
+    "aliases": [
+      "auth-status"
+    ],
+    "description": "Show whether the current browser session is logged into Practo",
+    "access": "read",
+    "domain": "www.practo.com",
+    "strategy": "cookie",
+    "browser": true,
+    "args": [],
+    "columns": [
+      "logged_in",
+      "site",
+      "name"
+    ],
+    "type": "js",
+    "modulePath": "practo/whoami.js",
+    "sourceFile": "practo/whoami.js",
+    "navigateBefore": false,
+    "siteSession": "persistent"
+  },
+  {
     "site": "producthunt",
     "name": "browse",
     "description": "Best products in a Product Hunt category",
@@ -26311,6 +27242,238 @@
     "sourceFile": "youtube/auth.js",
     "navigateBefore": false,
     "siteSession": "persistent"
+  },
+  {
+    "site": "zepto",
+    "name": "add-to-cart",
+    "description": "Add a Zepto product to cart",
+    "access": "write",
+    "domain": "www.zepto.com",
+    "strategy": "cookie",
+    "browser": true,
+    "args": [
+      {
+        "name": "product",
+        "type": "str",
+        "required": true,
+        "positional": true,
+        "help": "Product URL from Zepto search results"
+      },
+      {
+        "name": "quantity",
+        "type": "int",
+        "default": 1,
+        "required": false,
+        "help": "Quantity to add (max 12)"
+      }
+    ],
+    "columns": [
+      "ok",
+      "product_id",
+      "quantity",
+      "item_count",
+      "message"
+    ],
+    "type": "js",
+    "modulePath": "zepto/add-to-cart.js",
+    "sourceFile": "zepto/add-to-cart.js",
+    "navigateBefore": false
+  },
+  {
+    "site": "zepto",
+    "name": "cart",
+    "description": "Read Zepto cart line items",
+    "access": "read",
+    "domain": "www.zepto.com",
+    "strategy": "cookie",
+    "browser": true,
+    "args": [],
+    "columns": [
+      "rank",
+      "product_id",
+      "title",
+      "pack_size",
+      "quantity",
+      "price",
+      "mrp",
+      "availability"
+    ],
+    "type": "js",
+    "modulePath": "zepto/cart.js",
+    "sourceFile": "zepto/cart.js",
+    "navigateBefore": false
+  },
+  {
+    "site": "zepto",
+    "name": "checkout",
+    "description": "Open Zepto checkout review without placing an order",
+    "access": "write",
+    "domain": "www.zepto.com",
+    "strategy": "cookie",
+    "browser": true,
+    "args": [],
+    "columns": [
+      "ok",
+      "stage",
+      "item_count",
+      "next_action",
+      "url"
+    ],
+    "type": "js",
+    "modulePath": "zepto/checkout.js",
+    "sourceFile": "zepto/checkout.js",
+    "navigateBefore": false
+  },
+  {
+    "site": "zepto",
+    "name": "location",
+    "description": "Show the selected Zepto delivery location",
+    "access": "read",
+    "domain": "www.zepto.com",
+    "strategy": "cookie",
+    "browser": true,
+    "args": [],
+    "columns": [
+      "selected",
+      "label",
+      "area",
+      "city",
+      "pincode",
+      "hasCoordinates",
+      "source"
+    ],
+    "type": "js",
+    "modulePath": "zepto/location.js",
+    "sourceFile": "zepto/location.js",
+    "navigateBefore": false
+  },
+  {
+    "site": "zepto",
+    "name": "login",
+    "description": "Open Zepto login and wait until the browser session is authenticated",
+    "access": "write",
+    "domain": "www.zepto.com",
+    "strategy": "cookie",
+    "browser": true,
+    "args": [
+      {
+        "name": "timeout",
+        "type": "int",
+        "default": 300,
+        "required": false,
+        "help": "Maximum seconds to wait for the user to finish login"
+      }
+    ],
+    "columns": [
+      "status",
+      "logged_in",
+      "site"
+    ],
+    "type": "js",
+    "modulePath": "zepto/auth.js",
+    "sourceFile": "zepto/auth.js",
+    "navigateBefore": false,
+    "siteSession": "persistent",
+    "defaultWindowMode": "foreground"
+  },
+  {
+    "site": "zepto",
+    "name": "place-order",
+    "description": "Submit a real Zepto order only when --confirm true is passed",
+    "access": "write",
+    "domain": "www.zepto.com",
+    "strategy": "cookie",
+    "browser": true,
+    "args": [
+      {
+        "name": "confirm",
+        "type": "boolean",
+        "default": false,
+        "required": false,
+        "help": "Required. Set true to submit a real Zepto order/payment action."
+      }
+    ],
+    "columns": [
+      "status",
+      "confirmed",
+      "message"
+    ],
+    "type": "js",
+    "modulePath": "zepto/place-order.js",
+    "sourceFile": "zepto/place-order.js",
+    "navigateBefore": false
+  },
+  {
+    "site": "zepto",
+    "name": "product",
+    "description": "Read Zepto product details",
+    "access": "read",
+    "domain": "www.zepto.com",
+    "strategy": "cookie",
+    "browser": true,
+    "args": [
+      {
+        "name": "product",
+        "type": "str",
+        "required": true,
+        "positional": true,
+        "help": "Product URL from Zepto search results"
+      }
+    ],
+    "columns": [
+      "product_id",
+      "title",
+      "brand",
+      "pack_size",
+      "price",
+      "mrp",
+      "availability",
+      "url"
+    ],
+    "type": "js",
+    "modulePath": "zepto/product.js",
+    "sourceFile": "zepto/product.js",
+    "navigateBefore": false
+  },
+  {
+    "site": "zepto",
+    "name": "search",
+    "description": "Search Zepto products",
+    "access": "read",
+    "domain": "www.zepto.com",
+    "strategy": "cookie",
+    "browser": true,
+    "args": [
+      {
+        "name": "query",
+        "type": "str",
+        "required": true,
+        "positional": true,
+        "help": "Search query"
+      },
+      {
+        "name": "limit",
+        "type": "int",
+        "default": 20,
+        "required": false,
+        "help": "Maximum products to return (max 50)"
+      }
+    ],
+    "columns": [
+      "rank",
+      "product_id",
+      "title",
+      "brand",
+      "pack_size",
+      "price",
+      "mrp",
+      "availability",
+      "url"
+    ],
+    "type": "js",
+    "modulePath": "zepto/search.js",
+    "sourceFile": "zepto/search.js",
+    "navigateBefore": false
   },
   {
     "site": "zlibrary",

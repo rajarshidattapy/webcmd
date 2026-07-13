@@ -68,7 +68,7 @@ describe('createProgram root help descriptions', () => {
     expect(descriptionFor(program, 'browser')).toContain('verify');
     expect(descriptionFor(program, 'browser')).not.toContain('Browser control');
     expect(descriptionFor(program, 'auth')).toBe('refresh, status');
-    expect(descriptionFor(program, 'plugin')).toBe('create, install, list, uninstall, update');
+    expect(descriptionFor(program, 'plugin')).toBe('catalog, create, install, list, search, uninstall, update');
     expect(descriptionFor(program, 'adapter')).toBe('eject, reset, status');
     expect(descriptionFor(program, 'profile')).toBe('list, rename, use');
     expect(descriptionFor(program, 'daemon')).toBe('restart, status, stop');
@@ -693,7 +693,7 @@ name: 'search',
         description: 'Manage webcmd plugins',
         namespace_options: [],
       });
-      expect(data.commands.map((cmd: any) => cmd.name)).toEqual(['create', 'install', 'list', 'uninstall', 'update']);
+      expect(data.commands.map((cmd: any) => cmd.name)).toEqual(['catalog add', 'catalog list', 'catalog remove', 'create', 'install', 'list', 'search', 'uninstall', 'update']);
       const update = data.commands.find((cmd: any) => cmd.name === 'update');
       expect(update).toMatchObject({
         usage: 'webcmd plugin update [name] [options]',
@@ -1187,8 +1187,8 @@ describe('browser tab targeting commands', () => {
 
     await program.parseAsync(['node', 'webcmd', 'browser', '--session', 'test', 'bind', '--page', 'tab-2']);
 
-    expect(mockBrowserConnect).toHaveBeenCalledWith({ timeout: 45, session: 'test', surface: 'browser' });
-    expect(mockBindTab).toHaveBeenCalledWith('test', { page: 'tab-2' });
+    expect(mockBrowserConnect).toHaveBeenCalledWith({ timeout: 45, session: 'test', surface: 'browser', windowMode: 'foreground' });
+    expect(mockBindTab).toHaveBeenCalledWith('test', { page: 'tab-2', windowMode: 'foreground' });
     const out = lastJsonLog();
     expect(out.session).toBe('test');
     expect(out.url).toBe('https://user.example/inbox');
@@ -1199,10 +1199,19 @@ describe('browser tab targeting commands', () => {
 
     await program.parseAsync(['node', 'webcmd', 'browser', '--session', 'test', 'bind', '--index', '1']);
 
-    expect(mockBrowserConnect).toHaveBeenCalledWith({ timeout: 45, session: 'test', surface: 'browser' });
-    expect(mockBindTab).toHaveBeenCalledWith('test', { index: 1 });
+    expect(mockBrowserConnect).toHaveBeenCalledWith({ timeout: 45, session: 'test', surface: 'browser', windowMode: 'foreground' });
+    expect(mockBindTab).toHaveBeenCalledWith('test', { index: 1, windowMode: 'foreground' });
     const out = lastJsonLog();
     expect(out.session).toBe('test');
+  });
+
+  it('passes background window mode when binding a Cloak tab', async () => {
+    const program = createProgram('', '');
+
+    await program.parseAsync(['node', 'webcmd', 'browser', '--session', 'test', '--window', 'background', 'bind', '--page', 'tab-2']);
+
+    expect(mockBrowserConnect).toHaveBeenCalledWith({ timeout: 45, session: 'test', surface: 'browser', windowMode: 'background' });
+    expect(mockBindTab).toHaveBeenCalledWith('test', { page: 'tab-2', windowMode: 'background' });
   });
 
   it('requires an explicit Cloak tab target for bind', async () => {
@@ -1353,7 +1362,7 @@ describe('browser tab targeting commands', () => {
 
     await program.parseAsync(['node', 'webcmd', 'browser', '--session', 'test', 'unbind']);
 
-    expect(mockBrowserConnect).toHaveBeenCalledWith({ timeout: 45, session: 'test', surface: 'browser' });
+    expect(mockBrowserConnect).toHaveBeenCalledWith({ timeout: 45, session: 'test', surface: 'browser', windowMode: 'foreground' });
     expect(mockSendCommand).toHaveBeenCalledWith('close-window', { session: 'test', surface: 'browser' });
     const out = lastJsonLog();
     expect(out).toEqual({ unbound: true, session: 'test' });

@@ -10,7 +10,7 @@ Webcmd turns websites, Electron desktop apps, and external CLIs into a uniform `
 
 ## The Three Pillars
 
-- **Adapter commands:** `webcmd <site> <command> [...]`. Built-in adapters live in `clis/`; user adapters live in `~/.webcmd/clis/`. Each command has a strategy such as `PUBLIC`, `COOKIE`, `INTERCEPT`, `UI`, or `LOCAL`.
+- **Adapter commands:** `webcmd <site> <command> [...]`. Built-in adapters live in `clis/`; community adapters promoted to the main repo live as plugins under `plugins/`; private iteration adapters live in `~/.webcmd/clis/`. Each command has a strategy such as `PUBLIC`, `COOKIE`, `INTERCEPT`, `UI`, or `LOCAL`.
 - **Browser driving:** `webcmd browser *` subcommands (`open`, `state`, `click`, `type`, `select`, `find`, `extract`, `network`) for ad-hoc interaction when no adapter covers the task. See `webcmd-browser`.
 - **External CLI passthrough:** `webcmd gh`, `webcmd docker`, `webcmd vercel`, and similar wrappers. Manage them with `webcmd external install <name>` or `webcmd external register <name>`.
 
@@ -44,21 +44,25 @@ npx tsx src/main.ts <command>
 
 Electron desktop app adapters route through CDP against the running app. Make sure the app is open before invoking those commands.
 
-## Discover Installed Commands
+## Discover Commands
 
 Run commands instead of reading static docs:
 
 ```bash
-webcmd list
+webcmd
 webcmd list -f json
-webcmd list | grep -i github
 webcmd <site> --help
 webcmd <site> <command> --help
 ```
 
-Do not hard-code adapter lists. `webcmd list -f json` is the source of truth and emits one entry per command with fields such as `{site, name, aliases, description, strategy, browser, args, columns}`.
+Run `webcmd` with no arguments to see all available functions and installed site adapters. Do not hard-code adapter lists: `webcmd list -f json` is the source of truth for installed commands and emits one entry per command with fields such as `{site, name, aliases, description, strategy, browser, args, columns}`.
 
-Before falling back to raw `webcmd browser` on high-change authenticated sites, check whether a site adapter already exposes the workflow.
+Use this fallback order:
+
+1. Run `webcmd list -f json` once.
+2. Check that result against the whole requested workflow, not only a named site. If one installed command covers it, use that command and stop discovery.
+3. If none covers it, derive a short plugin query from the missing site or capability and run `webcmd plugin search <query> -f json`. Preserve the user's term when practical: `find flights` becomes `flight`.
+4. If plugin search returns a match, offer `webcmd plugin install <installSource>`. If it returns no match and no error, raw `webcmd browser` is allowed. If it errors, report plugin discovery as unavailable and stop. If `fetch failed` appears in `errors[].message`, report plugin discovery as unavailable due to network/reachability and ask the user whether to rerun with network/escalated permissions. Do not retry unless they approve.
 
 ## Universal Flags
 
@@ -102,10 +106,13 @@ The error envelope includes a `trace` block pointing at `summary.md`. Patch only
 
 ## Writing An Adapter
 
-Two storage paths:
+Storage paths:
 
 - Private: `~/.webcmd/clis/<site>/<command>.js`
-- Public / PR: `clis/<site>/<command>.js`
+- Public (official bundle): `clis/<site>/<command>.js`
+- Public (community PRs): `plugins/<site>/` plus root `webcmd-plugin.json` registration
+
+The main Webcmd repo is itself a plugin monorepo: promoted community CLIs belong under `plugins/<site>/` and must be registered in the root `webcmd-plugin.json`.
 
 Scaffolding and checks:
 
@@ -126,9 +133,15 @@ webcmd plugin list [-f json]
 webcmd plugin update [name] | --all
 webcmd plugin uninstall <name>
 webcmd plugin create <name>
+webcmd plugin search [query] -f json
+webcmd plugin catalog list -f json
+webcmd plugin catalog add <source>
+webcmd plugin catalog remove <id>
 ```
 
-Plugins are third-party extensions pulled from git and separate from the main adapter registry.
+Plugins are installable extensions pulled from git or local paths. Use `plugin search` for marketplace discovery and `plugin list` for already-installed plugins. Main-repo community CLIs are exposed through the root plugin catalog manifest, not bundled into npm's `clis/` set.
+
+> **Note:** The repository's `plugins/` directory is not shipped in the npm package. Find the required plugin with `webcmd plugin search`, then install its `installSource` with `webcmd plugin install <installSource>`.
 
 ## External CLI Passthrough
 
