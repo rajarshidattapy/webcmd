@@ -53,14 +53,9 @@ jobs:
         if: ${{ steps.release.outputs.release_created }}
         run: npm run build
 
-      - name: Check cli-manifest.json is up-to-date
+      - name: Check generated contract artifacts
         if: ${{ steps.release.outputs.release_created }}
-        shell: bash
-        run: |
-          if ! git diff --exit-code -- cli-manifest.json; then
-            echo "::error::cli-manifest.json drift detected at release time. Run 'npm run build' locally and commit the result before release."
-            exit 1
-          fi
+        run: npm run check:hosted-contract
 
       - name: Run tests
         if: ${{ steps.release.outputs.release_created }}

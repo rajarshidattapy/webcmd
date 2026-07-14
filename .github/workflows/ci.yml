@@ -39,14 +39,9 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Check cli-manifest.json is up-to-date
+      - name: Check generated contract artifacts
         if: runner.os == 'Linux'
-        shell: bash
-        run: |
-          if ! git diff --exit-code -- cli-manifest.json; then
-            echo "::error::cli-manifest.json is out of sync. Run 'npm run build' and commit the result."
-            exit 1
-          fi
+        run: npm run check:hosted-contract
 
       - name: Check npm package executable
         if: runner.os == 'Linux'
@@ -62,6 +57,7 @@ jobs:
 
   unit-test:
     name: Unit tests (${{ matrix.os }}, shard ${{ matrix.shard }}/2)
+    needs: build
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -84,6 +80,7 @@ jobs:
 
   adapter-test:
     name: Adapter tests
+    needs: build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -101,6 +98,7 @@ jobs:
 
   bun-test:
     name: Bun compatibility
+    needs: build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -122,6 +120,7 @@ jobs:
 
   smoke-test:
     name: Scheduled smoke tests
+    needs: build
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 15
