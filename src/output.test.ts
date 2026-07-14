@@ -98,6 +98,28 @@ describe('formatOutput', () => {
       .toBe(createHash('sha256').update(expected).digest('hex'));
   });
 
+  it('does not resolve stream rendering before the write callback and drain', async () => {
+    let release: (() => void) | undefined;
+    const stdout = new Writable({
+      highWaterMark: 1,
+      write(_chunk, _encoding, callback) {
+        release = callback;
+      },
+    });
+    let settled = false;
+    const rendering = render({ value: 'slow' }, {
+      fmt: 'plain',
+      fmtExplicit: true,
+      stdout,
+    }).then(() => { settled = true; });
+    await new Promise(resolve => setImmediate(resolve));
+
+    expect(settled).toBe(false);
+    release?.();
+    await rendering;
+    expect(settled).toBe(true);
+  });
+
   it('shows elapsed time when elapsed is zero', () => {
     expect(formatOutput([{ name: 'alice' }], {
       fmt: 'table',

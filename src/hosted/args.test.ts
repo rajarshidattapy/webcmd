@@ -42,7 +42,7 @@ describe('parseHostedInvocation', () => {
   });
 
   it('rejects missing required positional args', () => {
-    expect(() => parseHostedInvocation(command, [])).toThrow(/query.*required/i);
+    expect(() => parseHostedInvocation(command, [])).toThrow("error: missing required argument 'query'");
   });
 
   it.each([

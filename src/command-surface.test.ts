@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { Command } from 'commander';
 import {
+  CommanderStructuralError,
   coerceCommandArguments,
   configureCommandSurface,
   parseCommandSurface,
+  parseOutputFormat,
   type CommandSurfaceMetadata,
   type OutputFormat,
   type TraceMode,
@@ -100,18 +102,17 @@ describe('parseCommandSurface', () => {
     expect(parseCommandSurface(metadata, ['needle', '--trace', trace])).toMatchObject({ trace });
   });
 
-  it('parses profile, verbose, and help globals', () => {
-    expect(parseCommandSurface(metadata, ['--profile=work', '--verbose', '--help'])).toMatchObject({
-      profile: 'work',
-      verbose: true,
+  it('lets Commander help terminate before action-level global values are observed', () => {
+    expect(parseCommandSurface(metadata, ['--verbose', '--help'])).toMatchObject({
+      verbose: false,
       help: true,
     });
   });
 
   it.each([
-    { name: 'a missing required positional', argv: [], message: /query.*required/i },
-    { name: 'an extra positional', argv: ['needle', 'issues', 'extra'], message: /unexpected positional/i },
-    { name: 'a missing required option value', argv: ['needle', '--label'], message: /--label.*requires a value/i },
+    { name: 'a missing required positional', argv: [], message: /missing required argument 'query'/i },
+    { name: 'an extra positional', argv: ['needle', 'issues', 'extra'], message: /too many arguments.*search/i },
+    { name: 'a missing required option value', argv: ['needle', '--label'], message: /--label.*argument missing/i },
     { name: 'an unknown flag', argv: ['needle', '--unknown'], message: /unknown option/i },
     { name: 'a partial integer', argv: ['needle', '--limit', '12x'], message: /limit.*integer/i },
     { name: 'a fractional integer', argv: ['needle', '--limit', '1.5'], message: /limit.*integer/i },
@@ -326,5 +327,103 @@ describe('Commander parity for dash-prefixed numeric tokens', () => {
 
     expect(commander.kind).toBe(kind);
     expect(shared).toEqual(commander);
+  });
+});
+
+type ExactSurfaceOutcome =
+  | { kind: 'success'; args: Record<string, unknown>; format: string; trace: string }
+  | { kind: 'help' }
+  | { kind: 'structural'; stderr: string; exitCode: number }
+  | { kind: 'semantic'; message: string };
+
+const precedenceSurface = {
+  command: 'parity/check',
+  site: 'parity',
+  name: 'check',
+  args: [
+    { name: 'account', positional: true, required: true, type: 'string' },
+    { name: 'scope', positional: true, type: 'string' },
+    { name: 'token', required: true, valueRequired: true, type: 'string' },
+    { name: 'mode', type: 'string', choices: ['valid'] },
+  ],
+} satisfies CommandSurfaceMetadata;
+
+function captureReferenceSurface(argv: string[]): ExactSurfaceOutcome {
+  let stderr = '';
+  let outcome: ExactSurfaceOutcome | undefined;
+  const root = new Command('webcmd')
+    .exitOverride()
+    .configureOutput({ writeErr: value => { stderr += value; }, writeOut: () => undefined });
+  const command = root.command(precedenceSurface.site).command(precedenceSurface.name);
+  configureCommandSurface(command, precedenceSurface);
+  const positionals = precedenceSurface.args.filter(argument => argument.positional);
+  command.action((...actionArgs: unknown[]) => {
+    try {
+      const options = actionArgs[positionals.length] as Record<string, unknown>;
+      const raw: Record<string, unknown> = {};
+      for (let index = 0; index < positionals.length; index += 1) {
+        if (actionArgs[index] !== undefined) raw[positionals[index]!.name] = actionArgs[index];
+      }
+      for (const argument of precedenceSurface.args) {
+        if (argument.positional) continue;
+        const value = options[argument.name];
+        if (value !== undefined) raw[argument.name] = value;
+      }
+      const args = coerceCommandArguments(precedenceSurface.args, raw);
+      const format = parseOutputFormat(options.format ?? 'table');
+      const trace = String(options.trace ?? 'off');
+      if (!['off', 'on', 'retain-on-failure'].includes(trace)) {
+        throw new Error(`--trace must be one of: off, on, retain-on-failure. Received: "${trace}"`);
+      }
+      outcome = { kind: 'success', args, format, trace };
+    } catch (error) {
+      outcome = { kind: 'semantic', message: error instanceof Error ? error.message : String(error) };
+    }
+  });
+
+  try {
+    root.parse([precedenceSurface.site, precedenceSurface.name, ...argv], { from: 'user' });
+    return outcome ?? { kind: 'success', args: {}, format: 'table', trace: 'off' };
+  } catch (error) {
+    const commander = error as { code?: string; exitCode?: number };
+    if (commander.code === 'commander.helpDisplayed') return { kind: 'help' };
+    return { kind: 'structural', stderr, exitCode: commander.exitCode ?? 1 };
+  }
+}
+
+function captureSharedSurface(argv: string[]): ExactSurfaceOutcome {
+  try {
+    const parsed = parseCommandSurface(precedenceSurface, argv);
+    if (parsed.help) return { kind: 'help' };
+    return { kind: 'success', args: parsed.args, format: parsed.format, trace: parsed.trace };
+  } catch (error) {
+    if (error instanceof CommanderStructuralError) {
+      return { kind: 'structural', stderr: error.output, exitCode: error.exitCode };
+    }
+    return { kind: 'semantic', message: error instanceof Error ? error.message : String(error) };
+  }
+}
+
+describe('complete Commander structural grammar and precedence parity', () => {
+  it.each([
+    { name: 'help before unknown option', argv: ['--help', '--unknown'] },
+    { name: 'unknown option before help', argv: ['--unknown', '--help'] },
+    { name: 'help with a missing format value', argv: ['--help', '-f'] },
+    { name: 'help with excess positionals', argv: ['--help', 'one', 'two', 'three'] },
+    { name: 'help with invalid choice, format, and trace', argv: ['--help', '--mode', 'bad', '-f', 'xml', '--trace', 'bad'] },
+    { name: 'missing required named with invalid format', argv: ['account', '-f', 'xml'] },
+    { name: 'missing required named with invalid trace', argv: ['account', '--trace', 'bad'] },
+    { name: 'missing required named with invalid choice', argv: ['account', '--mode', 'bad'] },
+    { name: 'missing positional with invalid format', argv: ['--token', 'secret', '-f', 'xml'] },
+    { name: 'missing positional with invalid trace', argv: ['--token', 'secret', '--trace', 'bad'] },
+    { name: 'missing positional with invalid choice', argv: ['--token', 'secret', '--mode', 'bad'] },
+    { name: 'invalid choice precedes invalid format and trace', argv: ['account', '--token', 'secret', '--mode', 'bad', '-f', 'xml', '--trace', 'bad'] },
+    { name: 'invalid format precedes invalid trace', argv: ['account', '--token', 'secret', '-f', 'xml', '--trace', 'bad'] },
+    { name: 'ordinary unknown option', argv: ['account', '--token', 'secret', '--unknown'] },
+    { name: 'ordinary missing required option value', argv: ['account', '--token'] },
+    { name: 'ordinary excess positional', argv: ['account', 'scope', 'extra', '--token', 'secret'] },
+    { name: 'dash-leading positional after separator', argv: ['--token', 'secret', '--', '-account'] },
+  ])('$name', ({ argv }) => {
+    expect(captureSharedSurface(argv)).toEqual(captureReferenceSurface(argv));
   });
 });

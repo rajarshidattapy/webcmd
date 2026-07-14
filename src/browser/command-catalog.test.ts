@@ -6,10 +6,11 @@ import {
   buildHostedContract,
   type HostedArgumentContract,
 } from '../hosted/contract.js';
-import { browserCommandCatalog } from './command-catalog.js';
+import { browserCommandCatalog, browserOptionFlags } from './command-catalog.js';
 
 type StructuredArgument = {
   name: string;
+  flags?: string;
   help?: string;
   required?: boolean;
   variadic?: boolean;
@@ -76,6 +77,18 @@ describe('browserCommandCatalog', () => {
 
     expect(browserCommandCatalog.map(({ sessionPolicy: _sessionPolicy, action: _action, ...command }) => command))
       .toEqual(local);
+  });
+
+  it('preserves the exact local Commander flag grammar for every browser option', () => {
+    const local = new Map(localBrowserCommands().map(command => [
+      command.name.replaceAll(' ', '/'),
+      command.command_options.map(option => option.flags),
+    ]));
+
+    expect(Object.fromEntries(browserCommandCatalog.map(command => [
+      command.command,
+      command.options.map(browserOptionFlags),
+    ]))).toEqual(Object.fromEntries(local));
   });
 
   it('marks bind as the only local-only command and gives every hosted command an action', () => {

@@ -325,6 +325,27 @@ describe('commanderAdapter default formats', () => {
       expect.objectContaining({ fmt: 'json' }),
     );
   });
+
+  it('rejects an invalid explicit format through the shared typed boundary', async () => {
+    const program = new Command();
+    const siteCmd = program.command('gemini');
+    registerCommandToProgram(siteCmd, cmd);
+    const stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+
+    await program.parseAsync(['node', 'webcmd', 'gemini', 'ask', '--format', 'xml']);
+
+    expect(mockExecuteCommand).not.toHaveBeenCalled();
+    expect(process.exitCode).toBe(2);
+    expect(stderrSpy.mock.calls.map(call => String(call[0])).join('')).toBe([
+      'ok: false',
+      'error:',
+      '  code: ARGUMENT',
+      '  message: \'--format must be one of: table, plain, json, yaml, yml, md, markdown, csv. Received: "xml"\'',
+      '  exitCode: 2',
+      '',
+    ].join('\n'));
+    stderrSpy.mockRestore();
+  });
 });
 
 describe('commanderAdapter error envelope output', () => {

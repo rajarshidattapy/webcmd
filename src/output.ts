@@ -5,6 +5,7 @@
 import Table from 'cli-table3';
 import yaml from 'js-yaml';
 import type { ErrorEnvelope } from './errors.js';
+import { writeToStream } from './stream-write.js';
 
 export interface RenderOptions {
   fmt?: string;
@@ -57,14 +58,14 @@ export function formatOutput(data: unknown, opts: RenderOptions = {}): string {
 }
 
 /** Render to an injected stream, with the legacy console path retained for local callers. */
-export function render(data: unknown, opts: StreamRenderOptions = {}): void {
+export async function render(data: unknown, opts: StreamRenderOptions = {}): Promise<void> {
   const { stdout, ...formatOptions } = opts;
   const targetIsTTY = formatOptions.isTTY
     ?? (stdout ? (stdout as NodeJS.WritableStream & { isTTY?: boolean }).isTTY === true : process.stdout.isTTY === true);
   const output = formatOutput(data, { ...formatOptions, isTTY: targetIsTTY });
   if (!output) return;
   if (stdout) {
-    stdout.write(output);
+    await writeToStream(stdout, output);
     return;
   }
 

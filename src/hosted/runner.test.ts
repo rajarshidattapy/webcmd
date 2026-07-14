@@ -1,6 +1,12 @@
 import { createHash } from 'node:crypto';
-import { Writable } from 'node:stream';
+import { Writable, type WritableOptions } from 'node:stream';
+import type { Command } from 'commander';
 import { describe, expect, it, vi } from 'vitest';
+import { browserCommandCatalog } from '../browser/command-catalog.js';
+import { rewriteBrowserArgv } from '../cli-argv-preprocess.js';
+import { createProgram } from '../cli.js';
+import { formatRootHelp } from '../command-presentation.js';
+import { HOSTED_ROOT_HELP } from '../completion-shared.js';
 import { makeHostedConfig } from './config.js';
 import { runHostedCli } from './runner.js';
 
@@ -69,7 +75,520 @@ function executionResponse(input: {
   }), { status: 200 });
 }
 
+function manifestWithRequiredAccount() {
+  return {
+    ...manifest,
+    commands: manifest.commands.map(command => command.command === 'github/whoami'
+      ? {
+          ...command,
+          args: [
+            { name: 'account', positional: true, required: true, help: 'Account name' },
+            { name: 'mode', choices: ['valid'], help: 'Mode' },
+          ],
+        }
+      : command),
+  };
+}
+
+function manifestWithStructuralArguments() {
+  return {
+    ...manifest,
+    commands: manifest.commands.map(command => command.command === 'github/whoami'
+      ? {
+          ...command,
+          args: [
+            { name: 'account', positional: true, required: true, help: 'Account name' },
+            { name: 'token', required: true, valueRequired: true, help: 'Access token' },
+            { name: 'mode', choices: ['valid'], help: 'Mode' },
+          ],
+        }
+      : command),
+  };
+}
+
+class ControlledWritable extends Writable {
+  private readonly chunks: Buffer[] = [];
+  private readonly releases: Array<(error?: Error | null) => void> = [];
+
+  constructor(options?: WritableOptions) {
+    super(options);
+  }
+
+  override _write(chunk: Buffer, _encoding: BufferEncoding, callback: (error?: Error | null) => void): void {
+    this.chunks.push(Buffer.from(chunk));
+    this.releases.push(callback);
+  }
+
+  pendingCount(): number {
+    return this.releases.length;
+  }
+
+  release(error?: Error): void {
+    const callback = this.releases.shift();
+    if (!callback) throw new Error('No controlled write is pending');
+    callback(error);
+  }
+
+  text(): string {
+    return Buffer.concat(this.chunks).toString('utf8');
+  }
+}
+
+class CloseBeforeCallbackWritable extends Writable {
+  override _write(
+    _chunk: Buffer,
+    _encoding: BufferEncoding,
+    _callback: (error?: Error | null) => void,
+  ): void {
+    this.destroy();
+  }
+}
+
+async function within<T>(promise: Promise<T>, milliseconds = 500): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(() => reject(new Error(`promise did not settle within ${milliseconds}ms`)), milliseconds);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+function captureLocalBrowserStructure(argv: string[]): {
+  exitCode: number;
+  stdout: string;
+  stderr: string;
+} {
+  const program = createProgram('', '');
+  let stdout = '';
+  let stderr = '';
+  const configure = (command: Command): void => {
+    command
+      .exitOverride()
+      .configureOutput({
+        writeErr: value => { stderr += value; },
+        writeOut: value => { stdout += value; },
+      });
+    if (command.commands.length === 0) command.action(() => undefined);
+    for (const child of command.commands) configure(child);
+  };
+  configure(program);
+  try {
+    program.parse(rewriteBrowserArgv(argv), { from: 'user' });
+    return { exitCode: 0, stdout, stderr };
+  } catch (error) {
+    const commander = error as { exitCode?: number };
+    return { exitCode: commander.exitCode ?? 1, stdout, stderr };
+  }
+}
+
 describe('runHostedCli', () => {
+  it.each([
+    ['missing-site'],
+    ['missing-site', 'child'],
+    ['missing-site', 'child', 'grandchild'],
+    ['missing-site', '--format', 'json'],
+    ['missing-site', '--trace=on'],
+  ])('matches local unknown-site bytes when argv is %j', async (...argv) => {
+    const stdout = sink();
+    const stderr = sink();
+    const fetchImpl = vi.fn<typeof fetch>(async () => manifestResponse());
+
+    const result = await runHostedCli(argv, {
+      config: makeHostedConfig({ apiBaseUrl: 'https://api.example.com', apiKey: 'key' }),
+      stdout: stdout.stream,
+      stderr: stderr.stream,
+      fetchImpl,
+    });
+
+    expect(result).toEqual({ handled: true, exitCode: 2 });
+    expect(stderr.text()).toBe("error: unknown command 'missing-site'\n");
+    expect(stdout.text()).toBe(formatRootHelp(HOSTED_ROOT_HELP));
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(String(fetchImpl.mock.calls[0]![0])).toMatch(/\/v1\/manifest$/);
+  });
+
+  it('matches local Commander bytes for an unknown site command', async () => {
+    const stdout = sink();
+    const stderr = sink();
+
+    const result = await runHostedCli(['github', 'missing-command'], {
+      config: makeHostedConfig({ apiBaseUrl: 'https://api.example.com', apiKey: 'key' }),
+      stdout: stdout.stream,
+      stderr: stderr.stream,
+      fetchImpl: async () => manifestResponse(),
+    });
+
+    expect(result).toEqual({ handled: true, exitCode: 1 });
+    expect(stderr.text()).toBe("error: unknown command 'missing-command'\n");
+    expect(stdout.text()).toBe('');
+  });
+
+  it('matches local Commander bytes for a missing required positional', async () => {
+    const requiredManifest = manifestWithRequiredAccount();
+    const stdout = sink();
+    const stderr = sink();
+
+    const result = await runHostedCli(['github', 'whoami'], {
+      config: makeHostedConfig({ apiBaseUrl: 'https://api.example.com', apiKey: 'key' }),
+      stdout: stdout.stream,
+      stderr: stderr.stream,
+      fetchImpl: async () => new Response(JSON.stringify({ ok: true, manifest: requiredManifest }), { status: 200 }),
+    });
+
+    expect(result).toEqual({ handled: true, exitCode: 1 });
+    expect(stderr.text()).toBe("error: missing required argument 'account'\n");
+    expect(stdout.text()).toBe('');
+  });
+
+  it.each([
+    ['--help', '-f', 'xml'],
+    ['-f', 'xml', '--help'],
+    ['--help', '--trace', 'always'],
+    ['--help', '--mode', 'invalid'],
+  ])('lets help win over invalid semantic options: %j', async (...tail) => {
+    const precedenceManifest = manifestWithRequiredAccount();
+    const stdout = sink();
+    const stderr = sink();
+
+    const result = await runHostedCli(['github', 'whoami', ...tail], {
+      config: makeHostedConfig({ apiBaseUrl: 'https://api.example.com', apiKey: 'key' }),
+      stdout: stdout.stream,
+      stderr: stderr.stream,
+      fetchImpl: async () => new Response(JSON.stringify({ ok: true, manifest: precedenceManifest }), { status: 200 }),
+    });
+
+    expect(result).toEqual({ handled: true, exitCode: 0 });
+    expect(stderr.text()).toBe('');
+    expect(stdout.text()).toContain('Usage: webcmd github whoami <account> [options]');
+  });
+
+  it.each([
+    ['-f', 'xml'],
+    ['--trace', 'always'],
+    ['--mode', 'invalid'],
+  ])('lets a missing required positional win over invalid semantic options: %j', async (...tail) => {
+    const precedenceManifest = manifestWithRequiredAccount();
+    const stdout = sink();
+    const stderr = sink();
+
+    const result = await runHostedCli(['github', 'whoami', ...tail], {
+      config: makeHostedConfig({ apiBaseUrl: 'https://api.example.com', apiKey: 'key' }),
+      stdout: stdout.stream,
+      stderr: stderr.stream,
+      fetchImpl: async () => new Response(JSON.stringify({ ok: true, manifest: precedenceManifest }), { status: 200 }),
+    });
+
+    expect(result).toEqual({ handled: true, exitCode: 1 });
+    expect(stderr.text()).toBe("error: missing required argument 'account'\n");
+    expect(stdout.text()).toBe('');
+  });
+
+  it.each([
+    {
+      name: 'unknown option before help',
+      tail: ['--unknown', '--help'],
+      exitCode: 0,
+      stderr: '',
+      help: true,
+    },
+    {
+      name: 'help before an unknown option',
+      tail: ['--help', '--unknown'],
+      exitCode: 0,
+      stderr: '',
+      help: true,
+    },
+    {
+      name: 'missing option value after help',
+      tail: ['--help', '--token'],
+      exitCode: 1,
+      stderr: "error: option '--token <value>' argument missing\n",
+      help: false,
+    },
+    {
+      name: 'help before excess positionals',
+      tail: ['--help', 'one', 'two'],
+      exitCode: 0,
+      stderr: '',
+      help: true,
+    },
+    {
+      name: 'help before invalid choice, format, and trace values',
+      tail: ['--help', '--mode', 'bad', '-f', 'xml', '--trace', 'always'],
+      exitCode: 0,
+      stderr: '',
+      help: true,
+    },
+    {
+      name: 'required named option before invalid format',
+      tail: ['account', '-f', 'xml'],
+      exitCode: 1,
+      stderr: "error: required option '--token <value>' not specified\n",
+      help: false,
+    },
+    {
+      name: 'required named option before invalid trace',
+      tail: ['account', '--trace', 'always'],
+      exitCode: 1,
+      stderr: "error: required option '--token <value>' not specified\n",
+      help: false,
+    },
+    {
+      name: 'required named option before invalid choice',
+      tail: ['account', '--mode', 'bad'],
+      exitCode: 1,
+      stderr: "error: required option '--token <value>' not specified\n",
+      help: false,
+    },
+    {
+      name: 'required positional before invalid format',
+      tail: ['--token', 'secret', '-f', 'xml'],
+      exitCode: 1,
+      stderr: "error: missing required argument 'account'\n",
+      help: false,
+    },
+    {
+      name: 'ordinary unknown option',
+      tail: ['account', '--token', 'secret', '--unknown'],
+      exitCode: 1,
+      stderr: "error: unknown option '--unknown'\n",
+      help: false,
+    },
+    {
+      name: 'ordinary missing option value',
+      tail: ['account', '--token'],
+      exitCode: 1,
+      stderr: "error: option '--token <value>' argument missing\n",
+      help: false,
+    },
+    {
+      name: 'ordinary excess positional',
+      tail: ['account', 'extra', '--token', 'secret'],
+      exitCode: 1,
+      stderr: "error: too many arguments for 'whoami'. Expected 1 argument but got 2.\n",
+      help: false,
+    },
+  ])('matches public Commander structural bytes and discovery order: $name', async ({ tail, exitCode, stderr: expectedStderr, help }) => {
+    const structuralManifest = manifestWithStructuralArguments();
+    const stdout = sink();
+    const stderr = sink();
+    const fetchImpl = vi.fn<typeof fetch>(async () => new Response(
+      JSON.stringify({ ok: true, manifest: structuralManifest }),
+      { status: 200 },
+    ));
+
+    const result = await runHostedCli(['github', 'whoami', ...tail], {
+      config: makeHostedConfig({ apiBaseUrl: 'https://api.example.com', apiKey: 'key' }),
+      stdout: stdout.stream,
+      stderr: stderr.stream,
+      fetchImpl,
+    });
+
+    expect(result).toEqual({ handled: true, exitCode });
+    expect(stderr.text()).toBe(expectedStderr);
+    if (help) expect(stdout.text()).toContain('Usage: webcmd github whoami <account> [options]');
+    else expect(stdout.text()).toBe('');
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(String(fetchImpl.mock.calls[0]![0])).toBe('https://api.example.com/v1/manifest');
+  });
+
+  it.each([
+    { argv: ['--profile'], calls: 0 },
+    { argv: ['--help', '--profile'], calls: 0 },
+    { argv: ['--unknown', '--profile'], calls: 0 },
+    { argv: ['missing-site', '--profile'], calls: 1 },
+  ])('matches root Commander missing --profile bytes for %j', async ({ argv, calls }) => {
+    const stdout = sink();
+    const stderr = sink();
+    const fetchImpl = vi.fn<typeof fetch>(async () => manifestResponse());
+
+    const result = await runHostedCli(argv, {
+      config: makeHostedConfig({ apiBaseUrl: 'https://api.example.com', apiKey: 'key' }),
+      stdout: stdout.stream,
+      stderr: stderr.stream,
+      fetchImpl,
+    });
+
+    expect(result).toEqual({ handled: true, exitCode: 1 });
+    expect(stderr.text()).toBe("error: option '--profile <name>' argument missing\n");
+    expect(stdout.text()).toBe('');
+    expect(fetchImpl).toHaveBeenCalledTimes(calls);
+  });
+
+  it.each([
+    ['--help', '--unknown'],
+    ['--unknown', '--help'],
+  ])('lets root help win over an ordinary unknown root option: %j', async (...argv) => {
+    const stdout = sink();
+    const stderr = sink();
+    const fetchImpl = vi.fn<typeof fetch>();
+
+    const result = await runHostedCli(argv, {
+      config: makeHostedConfig({ apiBaseUrl: 'https://api.example.com', apiKey: 'key' }),
+      stdout: stdout.stream,
+      stderr: stderr.stream,
+      fetchImpl,
+    });
+
+    expect(result).toEqual({ handled: true, exitCode: 0 });
+    expect(stdout.text()).toBe(formatRootHelp(HOSTED_ROOT_HELP));
+    expect(stderr.text()).toBe('');
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { name: 'before command', argv: ['--profile', 'work', 'github', 'whoami', '-f', 'json'], profile: 'work' },
+    { name: 'equals form', argv: ['--profile=work', 'github', 'whoami', '-f', 'json'], profile: 'work' },
+    { name: 'dash-leading value', argv: ['--profile', '-dash', 'github', 'whoami', '-f', 'json'], profile: '-dash' },
+  ])('forwards a root profile in $name', async ({ argv, profile }) => {
+    const requests: Array<{ url: string; body?: Record<string, unknown> }> = [];
+    const result = await runHostedCli(argv, {
+      config: makeHostedConfig({ apiBaseUrl: 'https://api.example.com', apiKey: 'key' }),
+      stdout: sink().stream,
+      stderr: sink().stream,
+      fetchImpl: async (url, init) => {
+        requests.push({
+          url: String(url),
+          ...(init?.body ? { body: JSON.parse(String(init.body)) as Record<string, unknown> } : {}),
+        });
+        return String(url).endsWith('/v1/manifest')
+          ? manifestResponse()
+          : executionResponse({ result: [] });
+      },
+    });
+
+    expect(result).toEqual({ handled: true, exitCode: 0 });
+    expect(requests).toHaveLength(2);
+    expect(requests[1]?.body?.profile).toBe(profile);
+  });
+
+  it('does not consume a profile placed after a known leaf command', async () => {
+    const stdout = sink();
+    const stderr = sink();
+    const fetchImpl = vi.fn<typeof fetch>(async () => manifestResponse());
+
+    const result = await runHostedCli(['github', 'whoami', '--profile', 'work'], {
+      config: makeHostedConfig({ apiBaseUrl: 'https://api.example.com', apiKey: 'key' }),
+      stdout: stdout.stream,
+      stderr: stderr.stream,
+      fetchImpl,
+    });
+
+    expect(result).toEqual({ handled: true, exitCode: 1 });
+    expect(stderr.text()).toBe("error: unknown option '--profile'\n");
+    expect(stdout.text()).toBe('');
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it('matches Commander when a profile consumes -- and exposes the following dash-leading root token', async () => {
+    const stdout = sink();
+    const stderr = sink();
+    const fetchImpl = vi.fn<typeof fetch>();
+
+    const result = await runHostedCli(['--profile', '--', '-dash'], {
+      config: makeHostedConfig({ apiBaseUrl: 'https://api.example.com', apiKey: 'key' }),
+      stdout: stdout.stream,
+      stderr: stderr.stream,
+      fetchImpl,
+    });
+
+    expect(result).toEqual({ handled: true, exitCode: 1 });
+    expect(stderr.text()).toBe("error: unknown option '-dash'\n");
+    expect(stdout.text()).toBe('');
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it('does not resolve until its slow stdout write callback and drain complete', async () => {
+    const stdout = new ControlledWritable({ highWaterMark: 1 });
+    let settled = false;
+
+    const run = runHostedCli(['--help'], {
+      config: makeHostedConfig({ apiBaseUrl: 'https://api.example.com', apiKey: 'key' }),
+      stdout,
+    }).then(result => {
+      settled = true;
+      return result;
+    });
+    await new Promise(resolve => setImmediate(resolve));
+
+    expect(settled).toBe(false);
+    expect(stdout.pendingCount()).toBe(1);
+    stdout.release();
+    await expect(run).resolves.toEqual({ handled: true, exitCode: 0 });
+    expect(stdout.text()).toBe(formatRootHelp(HOSTED_ROOT_HELP));
+  });
+
+  it('writes unknown-site stderr before root-help stdout', async () => {
+    const order: string[] = [];
+    const orderedSink = (label: string) => new Writable({
+      write(_chunk, _encoding, callback) {
+        order.push(label);
+        callback();
+      },
+    });
+
+    const result = await runHostedCli(['missing-site', 'child'], {
+      config: makeHostedConfig({ apiBaseUrl: 'https://api.example.com', apiKey: 'key' }),
+      stdout: orderedSink('stdout'),
+      stderr: orderedSink('stderr'),
+      fetchImpl: async () => manifestResponse(),
+    });
+
+    expect(result.exitCode).toBe(2);
+    expect(order).toEqual(['stderr', 'stdout']);
+  });
+
+  it('does not resolve until a slow typed-error stderr write completes', async () => {
+    const stderr = new ControlledWritable({ highWaterMark: 1 });
+    let settled = false;
+    const run = runHostedCli(['github', 'whoami', '-f', 'xml'], {
+      config: makeHostedConfig({ apiBaseUrl: 'https://api.example.com', apiKey: 'key' }),
+      stderr,
+      fetchImpl: async () => manifestResponse(),
+    }).then(result => {
+      settled = true;
+      return result;
+    });
+    await new Promise(resolve => setImmediate(resolve));
+
+    expect(settled).toBe(false);
+    expect(stderr.pendingCount()).toBe(1);
+    stderr.release();
+    await expect(run).resolves.toEqual({ handled: true, exitCode: 2 });
+    expect(stderr.text()).toContain('code: ARGUMENT');
+  });
+
+  it('rejects output stream errors without translating them or ending the caller stream', async () => {
+    const stdout = new Writable({
+      write(_chunk, _encoding, callback) {
+        callback(new Error('hosted stdout failed'));
+      },
+    });
+    const end = vi.spyOn(stdout, 'end');
+
+    await expect(runHostedCli(['--help'], {
+      config: makeHostedConfig({ apiBaseUrl: 'https://api.example.com', apiKey: 'key' }),
+      stdout,
+    })).rejects.toThrow('hosted stdout failed');
+    expect(end).not.toHaveBeenCalled();
+  });
+
+  it('rejects within a bound when caller-owned stdout closes before its callback', async () => {
+    const stdout = new CloseBeforeCallbackWritable();
+    const end = vi.spyOn(stdout, 'end');
+
+    await expect(within(runHostedCli(['--help'], {
+      config: makeHostedConfig({ apiBaseUrl: 'https://api.example.com', apiKey: 'key' }),
+      stdout,
+    }))).rejects.toThrow('closed before the write completed');
+    expect(end).not.toHaveBeenCalled();
+  });
+
   it('renders hosted list without LOCAL commands', async () => {
     const stdout = sink();
 
@@ -388,6 +907,73 @@ describe('runHostedCli', () => {
     expect(stderr.text()).toMatch(/hosted mode has no local daemon/i);
   });
 
+  it.each([
+    { name: 'help before unknown leaf option', argv: ['browser', 'work', 'state', '--help', '--unknown'] },
+    { name: 'unknown leaf option before help', argv: ['browser', 'work', 'state', '--unknown', '--help'] },
+    { name: 'help followed by missing leaf option value', argv: ['browser', 'work', 'state', '--help', '--source'] },
+    { name: 'ordinary unknown leaf option', argv: ['browser', 'work', 'state', '--unknown'] },
+    { name: 'ordinary missing leaf option value', argv: ['browser', 'work', 'state', '--source'] },
+    { name: 'ordinary excess leaf positional', argv: ['browser', 'work', 'state', 'extra'] },
+    { name: 'ordinary missing required leaf positional', argv: ['browser', 'work', 'eval'] },
+    { name: 'missing namespace window value', argv: ['browser', 'work', '--window'] },
+    { name: 'unhoisted missing trailing window value', argv: ['browser', 'work', 'state', '--window'] },
+    { name: 'invalid Commander-coerced screenshot dimension', argv: ['browser', 'work', 'screenshot', '--width=-10'] },
+    { name: 'root profile after the leaf', argv: ['browser', 'work', 'state', '--profile', 'other'] },
+    { name: 'root profile between namespace and leaf', argv: ['browser', 'work', '--profile', 'other', 'state'] },
+    { name: 'adapter site-session option at browser namespace', argv: ['browser', 'work', '--site-session', 'persistent', 'state'] },
+    { name: 'adapter keep-tab option at browser leaf', argv: ['browser', 'work', 'state', '--keep-tab', 'true'] },
+    { name: 'unknown browser command', argv: ['browser', 'work', 'missing'] },
+  ])('matches local browser Commander structural bytes/status with no cloud call: $name', async ({ argv }) => {
+    const local = captureLocalBrowserStructure(argv);
+    const stdout = sink();
+    const stderr = sink();
+    const fetchImpl = vi.fn<typeof fetch>();
+
+    const result = await runHostedCli(argv, {
+      config: makeHostedConfig({ apiBaseUrl: 'https://api.example.com', apiKey: 'key' }),
+      stdout: stdout.stream,
+      stderr: stderr.stream,
+      fetchImpl,
+    });
+
+    expect({ exitCode: result.exitCode, stdout: stdout.text(), stderr: stderr.text() }).toEqual(local);
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it('matches the exact local text help for every catalogued browser leaf without a cloud call', async () => {
+    const program = createProgram('', '');
+    const browser = program.commands.find(command => command.name() === 'browser');
+    if (!browser) throw new Error('Local browser namespace is missing');
+
+    for (const contract of browserCommandCatalog) {
+      const parts = contract.command.split('/');
+      let local = browser;
+      for (const part of parts) {
+        const child = local.commands.find(command => command.name() === part || command.aliases().includes(part));
+        if (!child) throw new Error(`Local browser command is missing: ${contract.command}`);
+        local = child;
+      }
+      const stdout = sink();
+      const stderr = sink();
+      const fetchImpl = vi.fn<typeof fetch>();
+
+      const result = await runHostedCli(['browser', 'work', ...parts, '--help'], {
+        config: makeHostedConfig({ apiBaseUrl: 'https://api.example.com', apiKey: 'key' }),
+        stdout: stdout.stream,
+        stderr: stderr.stream,
+        fetchImpl,
+      });
+
+      expect({ command: contract.command, result, stdout: stdout.text(), stderr: stderr.text() }).toEqual({
+        command: contract.command,
+        result: { handled: true, exitCode: 0 },
+        stdout: local.helpInformation(),
+        stderr: '',
+      });
+      expect(fetchImpl).not.toHaveBeenCalled();
+    }
+  });
+
   it('routes hosted browser positional commands through the cloud lifecycle', async () => {
     const requests: Array<{ url: string; body?: unknown }> = [];
     const stdout = sink();
@@ -458,6 +1044,151 @@ describe('runHostedCli', () => {
         },
       },
     ]);
+  });
+
+  it('uses the canonical Commander value for a dash-leading browser option in both Cloud requests', async () => {
+    const requests: Array<{ url: string; body?: Record<string, unknown> }> = [];
+    const result = await runHostedCli(['browser', 'work', 'scroll', 'down', '--amount', '-5'], {
+      config: makeHostedConfig({ apiBaseUrl: 'https://api.example.com', apiKey: 'key' }),
+      stdout: sink().stream,
+      stderr: sink().stream,
+      fetchImpl: async (url, init) => {
+        const body = init?.body ? JSON.parse(String(init.body)) as Record<string, unknown> : undefined;
+        requests.push({ url: String(url), ...(body ? { body } : {}) });
+        if (String(url).endsWith('/v1/manifest')) return manifestResponse();
+        if (String(url).endsWith('/runs')) {
+          return new Response(JSON.stringify({
+            ok: true,
+            run: {
+              executionId: 'exec_browser_scroll',
+              session: 'work',
+              profile: { id: 'profile_default', displayName: 'default' },
+            },
+          }), { status: 201 });
+        }
+        if (String(url).endsWith('/actions')) {
+          return new Response(JSON.stringify({
+            ok: true,
+            result: { scrolled: 'down', amount: -5 },
+            columns: ['scrolled', 'amount'],
+            trace: null,
+          }), { status: 200 });
+        }
+        return new Response(JSON.stringify({
+          ok: true,
+          execution: { id: 'exec_browser_scroll', status: 'succeeded' },
+        }), { status: 200 });
+      },
+    });
+
+    expect(result).toEqual({ handled: true, exitCode: 0 });
+    expect(requests[1]?.body).toEqual({
+      command: 'browser/scroll',
+      args: { direction: 'down', amount: '-5' },
+      trace: 'off',
+    });
+    expect(requests[2]?.body).toEqual({
+      action: 'scroll',
+      args: { direction: 'down', amount: '-5' },
+    });
+  });
+
+  it.each([
+    {
+      name: 'repeated and equals string option',
+      argv: ['browser', 'work', 'scroll', 'down', '--amount', '10', '--amount=-5'],
+      command: 'browser/scroll',
+      action: 'scroll',
+      args: { direction: 'down', amount: '-5' },
+    },
+    {
+      name: 'equals dash-leading frame option',
+      argv: ['browser', 'work', 'eval', 'return 1', '--frame=-2'],
+      command: 'browser/eval',
+      action: 'exec',
+      args: { js: 'return 1', frame: '-2' },
+    },
+    {
+      name: 'Commander-coerced dimensions and repeated boolean flag',
+      argv: ['browser', 'work', 'screenshot', '--width=10', '--height', '20', '--full-page', '--full-page'],
+      command: 'browser/screenshot',
+      action: 'screenshot',
+      args: { fullPage: true, width: 10, height: 20 },
+    },
+    {
+      name: 'dash-leading timeout option',
+      argv: ['browser', 'work', 'wait', 'time', '1', '--timeout', '-5'],
+      command: 'browser/wait',
+      action: 'wait',
+      args: { type: 'time', value: '1', timeout: '-5' },
+    },
+    {
+      name: 'dash-leading observation option and boolean flag',
+      argv: ['browser', 'work', 'console', '--since', '-dash', '--follow'],
+      command: 'browser/console',
+      action: 'console',
+      args: { level: 'all', follow: true, since: '-dash' },
+    },
+    {
+      name: 'dash-leading positional behind separator',
+      argv: ['browser', 'work', 'eval', '--', '-script'],
+      command: 'browser/eval',
+      action: 'exec',
+      args: { js: '-script' },
+    },
+    {
+      name: 'variadic dash-leading positionals behind separator',
+      argv: ['browser', 'work', 'upload', 'input[type=file]', '--', '-one.txt', '-two.txt'],
+      command: 'browser/upload',
+      action: 'set-file-input',
+      args: { selector: 'input[type=file]', files: ['-one.txt', '-two.txt'] },
+    },
+    {
+      name: 'repeated namespace window option',
+      argv: ['browser', 'work', '--window', 'foreground', '--window=background', 'state'],
+      command: 'browser/state',
+      action: 'snapshot',
+      args: { source: 'dom' },
+      windowMode: 'background',
+    },
+  ])('sends canonical browser request bodies for $name', async ({ argv, command, action, args, windowMode }) => {
+    const requests: Array<{ url: string; body?: Record<string, unknown> }> = [];
+    const result = await runHostedCli(argv, {
+      config: makeHostedConfig({ apiBaseUrl: 'https://api.example.com', apiKey: 'key' }),
+      stdout: sink().stream,
+      stderr: sink().stream,
+      fetchImpl: async (url, init) => {
+        const body = init?.body ? JSON.parse(String(init.body)) as Record<string, unknown> : undefined;
+        requests.push({ url: String(url), ...(body ? { body } : {}) });
+        if (String(url).endsWith('/v1/manifest')) return manifestResponse();
+        if (String(url).endsWith('/runs')) {
+          return new Response(JSON.stringify({
+            ok: true,
+            run: {
+              executionId: 'exec_browser_canonical',
+              session: 'work',
+              profile: { id: 'profile_default', displayName: 'default' },
+            },
+          }), { status: 201 });
+        }
+        if (String(url).endsWith('/actions')) {
+          return new Response(JSON.stringify({ ok: true, result: {}, columns: [], trace: null }), { status: 200 });
+        }
+        return new Response(JSON.stringify({
+          ok: true,
+          execution: { id: 'exec_browser_canonical', status: 'succeeded' },
+        }), { status: 200 });
+      },
+    });
+
+    expect(result).toEqual({ handled: true, exitCode: 0 });
+    expect(requests[1]?.body).toEqual({
+      command,
+      args,
+      ...(windowMode ? { windowMode } : {}),
+      trace: 'off',
+    });
+    expect(requests[2]?.body).toEqual({ action, args });
   });
 
   it('rejects a browser manifest mismatch before starting a provider run', async () => {

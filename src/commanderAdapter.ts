@@ -15,7 +15,7 @@ import { log } from './logger.js';
 import { type CliCommand, fullName, getRegistry } from './registry.js';
 import { formatErrorEnvelope, render as renderOutput } from './output.js';
 import { executeCommand, prepareCommandArgs } from './execution.js';
-import { configureCommandSurface } from './command-surface.js';
+import { configureCommandSurface, parseOutputFormat } from './command-surface.js';
 import {
   commandHelpData,
   formatCommandHelpText,
@@ -97,7 +97,7 @@ export function registerCommandToProgram(
       const kwargs = prepareCommandArgs(cmd, rawKwargs);
 
       const verbose = optionsRecord.verbose === true;
-      let format = typeof optionsRecord.format === 'string' ? optionsRecord.format : 'table';
+      let format = parseOutputFormat(optionsRecord.format ?? 'table');
       const formatExplicit = subCmd.getOptionValueSource('format') === 'cli';
       if (verbose) process.env.WEBCMD_VERBOSE = '1';
       const globals = typeof subCmd.optsWithGlobals === 'function' ? subCmd.optsWithGlobals() as Record<string, unknown> : {};
@@ -121,7 +121,7 @@ export function registerCommandToProgram(
       if (verbose && (!result || (Array.isArray(result) && result.length === 0))) {
         log.warn('Command returned an empty result.');
       }
-      renderOutput(result, {
+      await renderOutput(result, {
         fmt: format,
         fmtExplicit: formatExplicit,
         columns: resolved.columns,

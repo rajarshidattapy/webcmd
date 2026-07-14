@@ -2,6 +2,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { BrowserSessionArgvError, rewriteBrowserArgv } from '../cli-argv-preprocess.js';
+import { CommanderStructuralError, MissingRequiredPositionalError } from '../command-surface.js';
 import { formatRootHelp, getCommandCompletionCandidates } from '../command-presentation.js';
 import {
   HOSTED_BUILTIN_COMMANDS,
@@ -12,8 +13,10 @@ import { ConfigError, EXIT_CODES, toEnvelope } from '../errors.js';
 import { getRequestedHelpFormat, renderStructuredHelp } from '../help.js';
 import { findPackageRoot } from '../package-paths.js';
 import { formatErrorEnvelope, render as renderOutput } from '../output.js';
+import { StreamWriteError, writeToStream } from '../stream-write.js';
 import { HostedClient, HostedClientError } from './client.js';
 import { parseHostedInvocation } from './args.js';
+import { HostedBrowserHelp, parseHostedBrowserStructure } from './browser-args.js';
 import {
   findHostedCommand,
   hostedCommandHelpData,
@@ -25,6 +28,7 @@ import {
   renderHostedSiteHelp,
 } from './manifest.js';
 import { isHostedConfig, loadWebcmdConfig, type WebcmdConfig } from './config.js';
+import { parseHostedRootCommandSurface } from '../root-command-surface.js';
 import type { HostedBrowserActionName, HostedBrowserRunActionResponse, HostedManifest } from './types.js';
 
 export interface HostedRunnerOptions {
@@ -38,6 +42,16 @@ export interface HostedRunnerOptions {
 export interface HostedRunResult {
   handled: boolean;
   exitCode: number;
+}
+
+class CommanderCompatibleError extends Error {
+  constructor(
+    readonly output: string,
+    readonly exitCode: number,
+    readonly stdoutOutput?: string,
+  ) {
+    super(output.trimEnd());
+  }
 }
 
 export async function runHostedCli(argv: string[], opts: HostedRunnerOptions = {}): Promise<HostedRunResult> {
@@ -55,7 +69,21 @@ export async function runHostedCli(argv: string[], opts: HostedRunnerOptions = {
     await dispatchHosted(argv, client, stdout, stderr, opts.now ?? Date.now);
     return { handled: true, exitCode: EXIT_CODES.SUCCESS };
   } catch (err) {
-    stderr.write(formatErrorEnvelope(toEnvelope(err), {
+    if (err instanceof StreamWriteError) throw err;
+    if (err instanceof CommanderStructuralError) {
+      await writeToStream(stderr, err.output);
+      return { handled: true, exitCode: err.exitCode };
+    }
+    if (err instanceof CommanderCompatibleError) {
+      await writeToStream(stderr, err.output);
+      if (err.stdoutOutput) await writeToStream(stdout, err.stdoutOutput);
+      return { handled: true, exitCode: err.exitCode };
+    }
+    if (err instanceof MissingRequiredPositionalError) {
+      await writeToStream(stderr, `error: missing required argument '${err.argumentName}'\n`);
+      return { handled: true, exitCode: EXIT_CODES.GENERIC_ERROR };
+    }
+    await writeToStream(stderr, formatErrorEnvelope(toEnvelope(err), {
       cmdName: hostedCommandName(argv),
       traceMode: hostedTraceMode(argv),
     }));
@@ -73,12 +101,26 @@ async function dispatchHosted(
   stderr: NodeJS.WritableStream,
   now: () => number,
 ): Promise<void> {
-  const normalized = stripGlobalOptions(argv);
-  const args = normalized.argv;
-  if (args.length === 0 || args[0] === '--help' || args[0] === '-h') {
-    stdout.write(formatRootHelp(HOSTED_ROOT_HELP));
+  const normalized = parseHostedRootCommandSurface(argv);
+  if (normalized.kind === 'help') {
+    const help = formatRootHelp(HOSTED_ROOT_HELP);
+    if (normalized.exitCode !== EXIT_CODES.SUCCESS) {
+      throw new CommanderCompatibleError(help, normalized.exitCode);
+    }
+    await writeToStream(stdout, help);
     return;
   }
+  if (normalized.kind === 'version') {
+    await writeToStream(stdout, normalized.output);
+    return;
+  }
+  if (normalized.kind === 'completion') {
+    const manifest = await client.getManifest();
+    validateManifestContractIdentity(manifest);
+    await writeToStream(stdout, hostedCompletions(manifest, normalized.argv).join('\n') + '\n');
+    return;
+  }
+  const args = normalized.argv;
   if (args[0] === 'daemon') {
     throw new ConfigError(
       'webcmd daemon is local-only. Hosted mode has no local daemon.',
@@ -95,27 +137,42 @@ async function dispatchHosted(
 
   const manifest = await client.getManifest();
   validateManifestContractIdentity(manifest);
-  if (isCompletionRequest(args)) {
-    stdout.write(hostedCompletions(manifest, args).join('\n') + '\n');
-    return;
-  }
   if (args[0] === 'list') {
-    renderHostedList(manifest, args.slice(1), stdout);
+    await renderHostedList(manifest, args.slice(1), stdout);
     return;
   }
 
   const site = args[0]!;
   const commandName = args[1];
+  const siteExists = manifest.commands.some(command => command.site === site);
+  if (!siteExists) {
+    const unknownRoot = parseUnknownSiteRootOptions(args);
+    if (unknownRoot.help) {
+      await writeToStream(stdout, formatRootHelp(HOSTED_ROOT_HELP));
+      return;
+    }
+    throw new CommanderCompatibleError(
+      `error: unknown command '${site}'\n`,
+      EXIT_CODES.USAGE_ERROR,
+      formatRootHelp(HOSTED_ROOT_HELP),
+    );
+  }
   if (!commandName || commandName === '--help' || commandName === '-h') {
     const data = hostedSiteHelpData(manifest, site);
-    if (!data) stdout.write(renderHostedSiteHelp(manifest, site));
-    else writeHostedHelp(stdout, args, data, renderHostedSiteHelp(manifest, site));
+    if (!data) {
+      throw new CommanderCompatibleError(
+        `error: unknown command '${site}'\n`,
+        EXIT_CODES.USAGE_ERROR,
+        formatRootHelp(HOSTED_ROOT_HELP),
+      );
+    }
+    await writeHostedHelp(stdout, args, data, renderHostedSiteHelp(manifest, site));
     return;
   }
 
   const command = findHostedCommand(manifest, site, commandName);
   if (!command) {
-    throw new ConfigError(`Unknown hosted Webcmd command: ${site}/${commandName}`);
+    throw new CommanderCompatibleError(`error: unknown command '${commandName}'\n`, EXIT_CODES.GENERIC_ERROR);
   }
   if (isLocalOnlyHostedCommand(command)) {
     throw new ConfigError(
@@ -123,9 +180,9 @@ async function dispatchHosted(
       LOCAL_ONLY_COMMAND_HELP,
     );
   }
-  const parsed = parseHostedInvocation(command, [...args.slice(2), ...normalized.trailingCommandOptions]);
+  const parsed = parseHostedInvocation(command, args.slice(2));
   if (parsed.help) {
-    writeHostedHelp(stdout, args, hostedCommandHelpData(command), renderHostedCommandHelp(command));
+    await writeHostedHelp(stdout, args, hostedCommandHelpData(command), renderHostedCommandHelp(command));
     return;
   }
 
@@ -143,7 +200,7 @@ async function dispatchHosted(
   }
   const elapsed = (now() - startTime) / 1000;
   if (response.result !== null && response.result !== undefined) {
-    renderOutput(response.result, {
+    await renderOutput(response.result, {
       fmt: format,
       fmtExplicit: parsed.formatExplicit,
       columns: response.columns ?? command.columns,
@@ -155,7 +212,7 @@ async function dispatchHosted(
     });
   }
   if (parsed.trace === 'on' && response.trace) {
-    stderr.write(`Webcmd trace artifact: ${response.trace.receipt}\n`);
+    await writeToStream(stderr, `Webcmd trace artifact: ${response.trace.receipt}\n`);
   }
 }
 
@@ -182,7 +239,7 @@ async function dispatchHostedBrowser(
     ...(invocation.windowMode !== undefined ? { windowMode: invocation.windowMode } : {}),
     trace: 'off',
   });
-  renderHostedBrowserResponse(stdout, invocation, response);
+  await renderHostedBrowserResponse(stdout, invocation, response);
 }
 
 function parseHostedBrowserInvocation(argv: string[], profile: string | undefined): ParsedHostedBrowserInvocation {
@@ -195,46 +252,34 @@ function parseHostedBrowserInvocation(argv: string[], profile: string | undefine
     }
     throw error;
   }
+  let structure;
+  try {
+    structure = parseHostedBrowserStructure(rewritten);
+  } catch (error) {
+    if (error instanceof HostedBrowserHelp) throw new CommanderCompatibleError('', 0, error.output);
+    throw error;
+  }
   if (rewritten[0] !== 'browser') {
     throw new ConfigError('Hosted browser invocation must start with browser.');
   }
-  if (rewritten[1] !== '--session' || !rewritten[2]) {
+  if (!structure.session) {
     throw new ConfigError(
       '<session> is required for hosted browser commands.',
       'Use: webcmd browser <session> <command>',
     );
   }
 
-  const session = rewritten[2];
-  let index = 3;
-  let windowMode: 'foreground' | 'background' | undefined;
-  while (index < rewritten.length) {
-    const token = rewritten[index];
-    if (token === '--window') {
-      windowMode = parseWindowMode(rewritten[index + 1]);
-      index += 2;
-      continue;
-    }
-    if (token?.startsWith('--window=')) {
-      windowMode = parseWindowMode(token.slice('--window='.length));
-      index += 1;
-      continue;
-    }
-    break;
-  }
-
-  const leaf = rewritten[index];
-  if (!leaf || leaf === '--help' || leaf === '-h') {
+  if (!structure.commandName) {
     throw new ConfigError(
       'Hosted browser command is required.',
       'Use: webcmd browser <session> open <url>, state, screenshot, tab list, or eval <js>.',
     );
   }
 
-  const rest = rewritten.slice(index + 1);
-  const parsed = parseBrowserLeaf(leaf, rest);
+  const windowMode = structure.window === undefined ? undefined : parseWindowMode(structure.window);
+  const parsed = parseBrowserLeaf(structure.commandName, structure.positionals, structure.options);
   return {
-    session,
+    session: structure.session,
     command: `browser/${parsed.commandName}`,
     action: parsed.action,
     args: parsed.args,
@@ -249,13 +294,16 @@ function parseWindowMode(value: string | undefined): 'foreground' | 'background'
   throw new ConfigError('--window must be one of: foreground, background.');
 }
 
-function parseBrowserLeaf(leaf: string, argv: string[]): {
+function parseBrowserLeaf(
+  leaf: string,
+  positionals: string[],
+  options: Record<string, unknown>,
+): {
   commandName: string;
   action: HostedBrowserActionName;
   args: Record<string, unknown>;
   localPath?: string;
 } {
-  const parsed = splitOptions(argv);
   switch (leaf) {
     case 'bind':
       throw new ConfigError(
@@ -266,35 +314,41 @@ function parseBrowserLeaf(leaf: string, argv: string[]): {
     case 'close':
       return { commandName: leaf, action: 'close-window', args: {} };
     case 'open':
-      return { commandName: 'open', action: 'navigate', args: { url: requiredPositional(parsed.positionals, 0, 'url') } };
+      return { commandName: 'open', action: 'navigate', args: { url: requiredPositional(positionals, 0, 'url') } };
     case 'back':
       return { commandName: 'back', action: 'back', args: {} };
     case 'state':
-      return { commandName: 'state', action: 'snapshot', args: { source: parsed.options.source ?? 'dom' } };
+      return { commandName: 'state', action: 'snapshot', args: { source: options.source ?? 'dom' } };
     case 'frames':
       return { commandName: 'frames', action: 'frames', args: {} };
     case 'screenshot': {
-      const localPath = parsed.positionals[0];
+      const localPath = positionals[0];
       return {
         commandName: 'screenshot',
         action: 'screenshot',
         args: {
-          fullPage: parsed.options.fullPage === true,
-          ...(parsed.options.width !== undefined ? { width: parsed.options.width } : {}),
-          ...(parsed.options.height !== undefined ? { height: parsed.options.height } : {}),
+          fullPage: options.fullPage === true,
+          ...(options.width !== undefined ? { width: options.width } : {}),
+          ...(options.height !== undefined ? { height: options.height } : {}),
         },
         ...(localPath !== undefined ? { localPath } : {}),
       };
     }
-    case 'tab':
-      return parseBrowserTab(parsed.positionals);
+    case 'tab/list':
+      return { commandName: 'tab/list', action: 'tabs', args: { op: 'list' } };
+    case 'tab/new':
+      return { commandName: 'tab/new', action: 'tabs', args: { op: 'new', ...(positionals[0] ? { url: positionals[0] } : {}) } };
+    case 'tab/select':
+      return { commandName: 'tab/select', action: 'tabs', args: { op: 'select', target: requiredPositional(positionals, 0, 'targetId') } };
+    case 'tab/close':
+      return { commandName: 'tab/close', action: 'tabs', args: { op: 'close', target: requiredPositional(positionals, 0, 'targetId') } };
     case 'eval':
       return {
         commandName: 'eval',
         action: 'exec',
         args: {
-          js: requiredPositional(parsed.positionals, 0, 'js'),
-          ...(parsed.options.frame !== undefined ? { frame: parsed.options.frame } : {}),
+          js: requiredPositional(positionals, 0, 'js'),
+          ...(options.frame !== undefined ? { frame: options.frame } : {}),
         },
       };
     case 'scroll':
@@ -302,31 +356,31 @@ function parseBrowserLeaf(leaf: string, argv: string[]): {
         commandName: 'scroll',
         action: 'scroll',
         args: {
-          direction: requiredPositional(parsed.positionals, 0, 'direction'),
-          amount: parsed.options.amount ?? 500,
+          direction: requiredPositional(positionals, 0, 'direction'),
+          amount: options.amount ?? '500',
         },
       };
     case 'keys':
-      return { commandName: 'keys', action: 'press-key', args: { key: requiredPositional(parsed.positionals, 0, 'key') } };
+      return { commandName: 'keys', action: 'press-key', args: { key: requiredPositional(positionals, 0, 'key') } };
     case 'wait':
       return {
         commandName: 'wait',
         action: 'wait',
         args: {
-          type: requiredPositional(parsed.positionals, 0, 'type'),
-          ...(parsed.positionals[1] !== undefined ? { value: parsed.positionals[1] } : {}),
-          ...(parsed.options.timeout !== undefined ? { timeout: parsed.options.timeout } : {}),
+          type: requiredPositional(positionals, 0, 'type'),
+          ...(positionals[1] !== undefined ? { value: positionals[1] } : {}),
+          ...(options.timeout !== undefined ? { timeout: options.timeout } : {}),
         },
       };
     case 'click':
-      return { commandName: 'click', action: 'click', args: { target: requiredPositional(parsed.positionals, 0, 'target') } };
+      return { commandName: 'click', action: 'click', args: { target: requiredPositional(positionals, 0, 'target') } };
     case 'type':
       return {
         commandName: 'type',
         action: 'type',
         args: {
-          target: requiredPositional(parsed.positionals, 0, 'target'),
-          text: requiredPositional(parsed.positionals, 1, 'text'),
+          target: requiredPositional(positionals, 0, 'target'),
+          text: requiredPositional(positionals, 1, 'text'),
         },
       };
     case 'fill':
@@ -334,8 +388,8 @@ function parseBrowserLeaf(leaf: string, argv: string[]): {
         commandName: 'fill',
         action: 'fill',
         args: {
-          target: requiredPositional(parsed.positionals, 0, 'target'),
-          text: requiredPositional(parsed.positionals, 1, 'text'),
+          target: requiredPositional(positionals, 0, 'target'),
+          text: requiredPositional(positionals, 1, 'text'),
         },
       };
     case 'upload':
@@ -343,65 +397,17 @@ function parseBrowserLeaf(leaf: string, argv: string[]): {
         commandName: 'upload',
         action: 'set-file-input',
         args: {
-          selector: parsed.positionals[0] ?? 'input[type="file"]',
-          files: parsed.positionals.slice(1),
+          selector: positionals[0] ?? 'input[type="file"]',
+          files: positionals.slice(1),
         },
       };
     case 'console':
-      return { commandName: 'console', action: 'console', args: parsed.options };
+      return { commandName: 'console', action: 'console', args: options };
     case 'network':
-      return { commandName: 'network', action: 'network', args: parsed.options };
+      return { commandName: 'network', action: 'network', args: options };
     default:
       throw new ConfigError(`Hosted browser command is not supported yet: ${leaf}`);
   }
-}
-
-function parseBrowserTab(positionals: string[]): {
-  commandName: string;
-  action: HostedBrowserActionName;
-  args: Record<string, unknown>;
-} {
-  const op = positionals[0] ?? 'list';
-  if (op === 'list') return { commandName: 'tab/list', action: 'tabs', args: { op: 'list' } };
-  if (op === 'new') return { commandName: 'tab/new', action: 'tabs', args: { op: 'new', ...(positionals[1] ? { url: positionals[1] } : {}) } };
-  if (op === 'select') return { commandName: 'tab/select', action: 'tabs', args: { op: 'select', target: requiredPositional(positionals, 1, 'targetId') } };
-  if (op === 'close') return { commandName: 'tab/close', action: 'tabs', args: { op: 'close', target: requiredPositional(positionals, 1, 'targetId') } };
-  throw new ConfigError(`Hosted browser tab command is not supported yet: ${op}`);
-}
-
-function splitOptions(argv: string[]): { positionals: string[]; options: Record<string, unknown> } {
-  const positionals: string[] = [];
-  const options: Record<string, unknown> = {};
-  let literal = false;
-  for (let i = 0; i < argv.length; i++) {
-    const token = argv[i]!;
-    if (literal) {
-      positionals.push(token);
-      continue;
-    }
-    if (token === '--') {
-      literal = true;
-      continue;
-    }
-    if (!token.startsWith('-') || token === '-') {
-      positionals.push(token);
-      continue;
-    }
-    if (token.startsWith('--') && token.includes('=')) {
-      const [rawKey, ...rawValue] = token.slice(2).split('=');
-      options[toCamelCase(rawKey!)] = coerceOptionValue(rawValue.join('='));
-      continue;
-    }
-    const key = token.replace(/^-+/, '');
-    const next = argv[i + 1];
-    if (next !== undefined && !next.startsWith('-')) {
-      options[toCamelCase(key)] = coerceOptionValue(next);
-      i += 1;
-    } else {
-      options[toCamelCase(key)] = true;
-    }
-  }
-  return { positionals, options };
 }
 
 function requiredPositional(values: string[], index: number, label: string): string {
@@ -412,56 +418,49 @@ function requiredPositional(values: string[], index: number, label: string): str
   return value;
 }
 
-function toCamelCase(value: string): string {
-  return value.replace(/-([a-z])/g, (_match, letter: string) => letter.toUpperCase());
-}
-
-function coerceOptionValue(value: string): string | number | boolean {
-  if (value === 'true') return true;
-  if (value === 'false') return false;
-  if (/^-?\d+$/.test(value)) return Number.parseInt(value, 10);
-  return value;
-}
-
-function renderHostedBrowserResponse(
+async function renderHostedBrowserResponse(
   stdout: NodeJS.WritableStream,
   invocation: ParsedHostedBrowserInvocation,
   response: HostedBrowserRunActionResponse,
-): void {
+): Promise<void> {
   const result = response.result;
   if (invocation.action === 'snapshot' && result && typeof result === 'object') {
     const record = result as { url?: unknown; snapshot?: unknown };
-    stdout.write(`URL: ${typeof record.url === 'string' ? record.url : ''}\n\n`);
-    stdout.write(`${typeof record.snapshot === 'string' ? record.snapshot : JSON.stringify(record.snapshot, null, 2)}\n`);
+    await writeToStream(stdout, `URL: ${typeof record.url === 'string' ? record.url : ''}\n\n`);
+    await writeToStream(stdout, `${typeof record.snapshot === 'string' ? record.snapshot : JSON.stringify(record.snapshot, null, 2)}\n`);
     return;
   }
   if (invocation.action === 'screenshot' && result && typeof result === 'object') {
     const base64 = (result as { base64?: unknown }).base64;
     if (typeof base64 === 'string' && invocation.localPath) {
       writeFileSync(invocation.localPath, Buffer.from(base64, 'base64'));
-      stdout.write(`Screenshot saved to: ${invocation.localPath}\n`);
+      await writeToStream(stdout, `Screenshot saved to: ${invocation.localPath}\n`);
       return;
     }
     if (typeof base64 === 'string') {
-      stdout.write(`${base64}\n`);
+      await writeToStream(stdout, `${base64}\n`);
       return;
     }
   }
   if (typeof result === 'string') {
-    stdout.write(`${result}\n`);
+    await writeToStream(stdout, `${result}\n`);
     return;
   }
-  stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+  await writeToStream(stdout, `${JSON.stringify(result, null, 2)}\n`);
 }
 
-function renderHostedList(manifest: HostedManifest, argv: string[], stdout: NodeJS.WritableStream): void {
+async function renderHostedList(
+  manifest: HostedManifest,
+  argv: string[],
+  stdout: NodeJS.WritableStream,
+): Promise<void> {
   const { format: fmt, explicit } = readFormat(argv);
   const presentation = hostedListPresentation(manifest, fmt);
   if (presentation.displayLines) {
-    for (const line of presentation.displayLines) stdout.write(`${line}\n`);
+    for (const line of presentation.displayLines) await writeToStream(stdout, `${line}\n`);
     return;
   }
-  renderOutput(presentation.rows, {
+  await renderOutput(presentation.rows, {
     fmt,
     fmtExplicit: explicit,
     columns: presentation.columns,
@@ -469,14 +468,14 @@ function renderHostedList(manifest: HostedManifest, argv: string[], stdout: Node
   });
 }
 
-function writeHostedHelp(
+async function writeHostedHelp(
   stdout: NodeJS.WritableStream,
   argv: readonly string[],
   data: Record<string, unknown>,
   text: string,
-): void {
+): Promise<void> {
   const format = getRequestedHelpFormat(argv);
-  stdout.write(format ? renderStructuredHelp(data, format) : text);
+  await writeToStream(stdout, format ? renderStructuredHelp(data, format) : text);
 }
 
 function readFormat(argv: string[]): { format: string; explicit: boolean } {
@@ -487,27 +486,26 @@ function readFormat(argv: string[]): { format: string; explicit: boolean } {
   return { format: 'table', explicit: false };
 }
 
-function stripGlobalOptions(argv: string[]): { argv: string[]; trailingCommandOptions: string[]; profile?: string } {
-  const out: string[] = [];
-  const trailingCommandOptions: string[] = [];
+function parseUnknownSiteRootOptions(argv: readonly string[]): { help: boolean; profile?: string } {
   let profile: string | undefined;
-  for (let i = 0; i < argv.length; i++) {
+  for (let i = 1; i < argv.length; i += 1) {
     const token = argv[i]!;
     if (token === '--profile') {
-      profile = argv[++i];
+      const value = argv[i + 1];
+      if (value === undefined) {
+        throw new CommanderStructuralError("error: option '--profile <name>' argument missing\n", 1);
+      }
+      profile = value;
+      i += 1;
       continue;
     }
     if (token.startsWith('--profile=')) {
       profile = token.slice('--profile='.length);
       continue;
     }
-    out.push(token);
+    if (token === '--help' || token === '-h') return { help: true, ...(profile !== undefined ? { profile } : {}) };
   }
-  return { argv: out, trailingCommandOptions, ...(profile ? { profile } : {}) };
-}
-
-function isCompletionRequest(argv: string[]): boolean {
-  return argv.includes('--get-completions');
+  return { help: false, ...(profile !== undefined ? { profile } : {}) };
 }
 
 function hostedCompletions(manifest: HostedManifest, argv: string[]): string[] {

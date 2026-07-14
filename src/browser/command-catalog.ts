@@ -1,3 +1,4 @@
+import { InvalidArgumentError } from 'commander';
 import type {
   HostedArgumentContract,
   HostedBrowserCommandContract,
@@ -54,6 +55,78 @@ function flag(
   return argument(name, 'boolean', description, false, {
     ...(defaultValue !== undefined ? { default: defaultValue } : {}),
   });
+}
+
+const BROWSER_OPTION_VALUE_NAMES: Readonly<Record<string, string>> = {
+  amount: 'pixels',
+  as: 'format',
+  childrenMax: 'n',
+  chunkSize: 'chars',
+  css: 'selector',
+  depth: 'n',
+  detail: 'key',
+  filter: 'fields',
+  frame: 'index',
+  fromLabel: 'text',
+  fromName: 'text',
+  fromNth: 'n',
+  fromRole: 'role',
+  fromTestid: 'id',
+  fromText: 'text',
+  height: 'n',
+  index: 'n',
+  label: 'text',
+  level: 'level',
+  limit: 'n',
+  max: 'n',
+  maxBody: 'chars',
+  name: 'text',
+  nth: 'n',
+  page: 'id',
+  role: 'role',
+  seedArgs: 'value',
+  selector: 'css',
+  since: 'duration',
+  source: 'source',
+  start: 'char',
+  tab: 'targetId',
+  testid: 'id',
+  text: 'text',
+  textMax: 'n',
+  timeout: 'ms',
+  toLabel: 'text',
+  toName: 'text',
+  toNth: 'n',
+  toRole: 'role',
+  toTestid: 'id',
+  toText: 'text',
+  trace: 'mode',
+  ttl: 'ms',
+  until: 'duration',
+  width: 'n',
+};
+
+/** Exact local Commander flags for every catalogued browser option. */
+export function browserOptionFlags(option: HostedArgumentContract): string {
+  const longName = option.name.replace(/[A-Z]/g, character => `-${character.toLowerCase()}`);
+  if (option.type === 'boolean') return option.name === 'fixture' ? '--no-fixture' : `--${longName}`;
+  const valueName = BROWSER_OPTION_VALUE_NAMES[option.name];
+  if (!valueName) throw new Error(`Browser option --${longName} is missing its Commander value name`);
+  return `--${longName} <${valueName}>`;
+}
+
+/** Shared Commander value parser for browser options with structural coercion. */
+export function browserOptionValueParser(
+  commandPath: string,
+  optionName: string,
+): ((value: string) => unknown) | undefined {
+  if (commandPath !== 'screenshot' || (optionName !== 'width' && optionName !== 'height')) return undefined;
+  return (value: string): number => {
+    if (!/^\d+$/.test(value) || Number.parseInt(value, 10) <= 0) {
+      throw new InvalidArgumentError(`--${optionName} must be a positive integer (got "${value}")`);
+    }
+    return Number.parseInt(value, 10);
+  };
 }
 
 function command(

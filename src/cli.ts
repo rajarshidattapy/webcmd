@@ -10,7 +10,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import * as readline from 'node:readline/promises';
 import { fileURLToPath } from 'node:url';
-import { Command, InvalidArgumentError, Option } from 'commander';
+import { Command, Option } from 'commander';
 import { findPackageRoot, getBuiltEntryCandidates } from './package-paths.js';
 import { type CliCommand, getRegistry } from './registry.js';
 import { commandListPresentation, toPresentableCommand } from './command-presentation.js';
@@ -33,6 +33,7 @@ import { parseFilter, shapeMatchesFilter } from './browser/shape-filter.js';
 import { buildHtmlTreeJs, type HtmlTreeResult } from './browser/html-tree.js';
 import { buildExtractHtmlJs, runExtractFromHtml } from './browser/extract.js';
 import { analyzeSite, type PageSignals } from './browser/analyze.js';
+import { browserOptionValueParser } from './browser/command-catalog.js';
 import { registerAuthCommands } from './commands/auth.js';
 import { daemonRestart, daemonStatus, daemonStop } from './commands/daemon.js';
 import { log } from './logger.js';
@@ -44,6 +45,7 @@ import { DEFAULT_BROWSER_CONNECT_TIMEOUT } from './browser/config.js';
 import { CLI_COMMAND } from './brand.js';
 import type { BrowserDownloadWaitResult, IPage, ScreenshotOptions } from './types.js';
 import type { BrowserWindowMode } from './runtime.js';
+import { configureRootCommandSurface } from './root-command-surface.js';
 
 const CLI_FILE = fileURLToPath(import.meta.url);
 const BROWSER_TAB_OPTION_DESCRIPTION = 'Target tab/page identity returned by "browser open", "browser tab new", or "browser tab list"';
@@ -743,17 +745,6 @@ function parsePositiveIntOption(val: string | undefined, label: string, fallback
   return parsed;
 }
 
-function parseScreenshotDim(val: string, label: string): number {
-  if (!/^\d+$/.test(val)) {
-    throw new InvalidArgumentError(`--${label} must be a positive integer (got "${val}")`);
-  }
-  const parsed = parseInt(val, 10);
-  if (parsed <= 0) {
-    throw new InvalidArgumentError(`--${label} must be a positive integer (got "${val}")`);
-  }
-  return parsed;
-}
-
 function applyVerbose(opts: { verbose?: boolean }): void {
   if (opts.verbose) process.env.WEBCMD_VERBOSE = '1';
 }
@@ -778,10 +769,8 @@ export function createProgram(BUILTIN_CLIS: string, USER_CLIS: string): Command 
   // prerequisite for passThroughOptions to forward --help/--version to external binaries
   program
     .name('webcmd')
-    .description('Make any website your CLI. Zero setup. AI-powered.')
-    .version(PKG_VERSION)
-    .option('--profile <name>', 'Chrome profile/context alias for browser runtime commands')
-    .enablePositionalOptions();
+    .description('Make any website your CLI. Zero setup. AI-powered.');
+  configureRootCommandSurface(program);
 
   // ── Built-in: list ────────────────────────────────────────────────────────
 
@@ -1296,8 +1285,8 @@ Examples:
   addBrowserTabOption(browser.command('screenshot').argument('[path]', 'Save to file (base64 if omitted)'))
     .option('--full-page', 'Capture the full scrollable page, not just the viewport', false)
     .option('--annotate', 'Overlay visible browser state ref labels on the screenshot', false)
-    .option('--width <n>', 'Override viewport width in CSS pixels for this screenshot only', (v: string) => parseScreenshotDim(v, 'width'))
-    .option('--height <n>', 'Override viewport height in CSS pixels for this screenshot only (ignored with --full-page)', (v: string) => parseScreenshotDim(v, 'height'))
+    .option('--width <n>', 'Override viewport width in CSS pixels for this screenshot only', (value: string) => browserOptionValueParser('screenshot', 'width')!(value))
+    .option('--height <n>', 'Override viewport height in CSS pixels for this screenshot only (ignored with --full-page)', (value: string) => browserOptionValueParser('screenshot', 'height')!(value))
     .description('Take screenshot')
     .action(browserAction(async (page, path, opts) => {
       const shotOpts: ScreenshotOptions = {

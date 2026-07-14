@@ -31,6 +31,27 @@ export interface ParsedCommandSurface {
   help: boolean;
 }
 
+/** Identifies the one parser failure whose public bytes are owned by Commander. */
+export class MissingRequiredPositionalError extends ArgumentError {
+  readonly argumentName: string;
+
+  constructor(argumentName: string, help?: string) {
+    super(`Argument "${argumentName}" is required.`, help);
+    this.argumentName = argumentName;
+  }
+}
+
+/** Raw structural failure bytes/status owned by Commander. */
+export class CommanderStructuralError extends Error {
+  constructor(
+    readonly output: string,
+    readonly exitCode: number,
+  ) {
+    super(output.trimEnd());
+    this.name = 'CommanderStructuralError';
+  }
+}
+
 /** Register the adapter argument grammar and its shared execution options. */
 export function configureCommandSurface(command: Command, metadata: CommandSurfaceMetadata): void {
   for (const arg of metadata.args) {
@@ -65,116 +86,80 @@ export function parseCommandSurface(
   metadata: CommandSurfaceMetadata,
   argv: string[],
 ): ParsedCommandSurface {
+  const positionals = metadata.args.filter((arg) => arg.positional);
+  const defaultFormat = metadata.defaultFormat || 'table';
   const input: Record<string, unknown> = {};
   const optionSources: Record<string, 'cli' | 'default'> = {};
-  const positionals = metadata.args.filter((arg) => arg.positional);
-  const named = new Map(metadata.args.filter((arg) => !arg.positional).map((arg) => [arg.name, arg]));
-  let positionalIndex = 0;
-  let format = parseOutputFormat(metadata.defaultFormat || 'table');
-  let formatExplicit = false;
-  let trace: TraceMode = 'off';
-  let profile: string | undefined;
-  let verbose = false;
-  let help = false;
+  const { root, command, parseArgv } = makeStructuralCommand(metadata, argv);
+  let parsedOptions: Record<string, unknown> = {};
+  let actionRan = false;
+  let stderr = '';
 
-  const assignPositional = (value: string): void => {
-    const definition = positionals[positionalIndex++];
-    if (!definition) throw new ArgumentError(`Unexpected positional argument: ${value}`);
-    input[definition.name] = value;
-    optionSources[definition.name] = 'cli';
+  const commanderOutput = {
+      writeErr: (value: string) => { stderr += value; },
+      // Hosted mode owns help presentation; Commander is used only for its
+      // grammar, precedence, exact structural errors, and exit status.
+      writeOut: (_value: string) => undefined,
   };
-
-  for (let index = 0; index < argv.length; index += 1) {
-    const token = argv[index]!;
-    if (token === '--') {
-      for (const rest of argv.slice(index + 1)) assignPositional(rest);
-      break;
-    }
-    if (token === '-h' || token === '--help') {
-      help = true;
-      continue;
-    }
-    if (token === '-v' || token === '--verbose') {
-      verbose = true;
-      continue;
-    }
-    if (token === '-f' || token === '--format') {
-      format = parseOutputFormat(readRequiredValue(argv, ++index, token));
-      formatExplicit = true;
-      continue;
-    }
-    if (token.startsWith('--format=')) {
-      format = parseOutputFormat(token.slice('--format='.length));
-      formatExplicit = true;
-      continue;
-    }
-    if (token.startsWith('-f') && token.length > 2) {
-      format = parseOutputFormat(token.slice(2));
-      formatExplicit = true;
-      continue;
-    }
-    if (token === '--trace') {
-      trace = parseTraceMode(readRequiredValue(argv, ++index, token));
-      continue;
-    }
-    if (token.startsWith('--trace=')) {
-      trace = parseTraceMode(token.slice('--trace='.length));
-      continue;
-    }
-    if (token === '--profile') {
-      profile = readRequiredValue(argv, ++index, token);
-      continue;
-    }
-    if (token.startsWith('--profile=')) {
-      profile = token.slice('--profile='.length);
-      continue;
-    }
-    if (token.startsWith('--')) {
-      const equalsIndex = token.indexOf('=');
-      const name = token.slice(2, equalsIndex === -1 ? undefined : equalsIndex);
-      const definition = named.get(name);
-      if (!definition) throw new ArgumentError(`Unknown option for ${commandName(metadata)}: --${name}`);
-
-      const inlineValue = equalsIndex === -1 ? undefined : token.slice(equalsIndex + 1);
-      const expectsValue = definition.required || definition.valueRequired;
-      let value: unknown;
-      if (inlineValue !== undefined) {
-        value = inlineValue;
-      } else if (expectsValue) {
-        value = readRequiredValue(argv, ++index, token);
-      } else {
-        const next = argv[index + 1];
-        if (next !== undefined && next !== '--'
-          && (!isOptionToken(next) || isNegativeNumberToken(next))) {
-          value = next;
-          index += 1;
-        } else {
-          value = true;
-        }
-      }
-      input[definition.name] = value;
-      optionSources[definition.name] = 'cli';
-      continue;
-    }
-    if (isOptionToken(token)) {
-      const positionalAvailable = positionals[positionalIndex] !== undefined;
-      if (!positionalAvailable || !isNegativeNumberToken(token)) {
-        throw new ArgumentError(`Unknown option for ${commandName(metadata)}: ${token}`);
-      }
-    }
-    assignPositional(token);
+  for (let current: Command | null = command; current; current = current.parent) {
+    current.exitOverride().configureOutput(commanderOutput);
   }
 
-  for (const definition of metadata.args) {
-    if (optionSources[definition.name] === undefined && definition.default !== undefined) {
-      optionSources[definition.name] = 'default';
+  command.action((...actionArgs: unknown[]) => {
+    actionRan = true;
+    parsedOptions = actionArgs[positionals.length] as Record<string, unknown>;
+    for (let index = 0; index < positionals.length; index += 1) {
+      const value = actionArgs[index];
+      if (value !== undefined) {
+        input[positionals[index]!.name] = value;
+        optionSources[positionals[index]!.name] = 'cli';
+      }
     }
+    for (const definition of metadata.args) {
+      if (definition.positional) continue;
+      const camelName = definition.name.replace(/-([a-z])/g, (_match, character: string) => character.toUpperCase());
+      const value = parsedOptions[definition.name] ?? parsedOptions[camelName];
+      if (value !== undefined) input[definition.name] = value;
+      const source = command.getOptionValueSource(camelName) ?? command.getOptionValueSource(definition.name);
+      if (source === 'cli' || source === 'default') {
+        optionSources[definition.name] = source as 'cli' | 'default';
+      }
+    }
+  });
+
+  try {
+    root.parse(parseArgv, { from: 'user' });
+  } catch (error) {
+    const commander = error as { code?: unknown; exitCode?: unknown; message?: unknown };
+    if (commander.code === 'commander.helpDisplayed') {
+      return {
+        args: {},
+        optionSources: {},
+        format: parseOutputFormat(defaultFormat),
+        formatExplicit: false,
+        trace: 'off',
+        verbose: false,
+        help: true,
+      };
+    }
+    const output = stderr || `${typeof commander.message === 'string' ? commander.message : String(error)}\n`;
+    throw new CommanderStructuralError(
+      output,
+      typeof commander.exitCode === 'number' ? commander.exitCode : 1,
+    );
+  }
+  if (!actionRan) {
+    throw new CommanderStructuralError(`error: command '${command.name()}' did not run\n`, 1);
   }
 
-  const definitions = help
-    ? metadata.args.map((definition) => definition.required ? { ...definition, required: false } : definition)
-    : metadata.args;
-  const args = coerceCommandArguments(definitions, input);
+  // Match the local action boundary: adapter argument coercion occurs before
+  // format validation, and trace validation occurs inside executeCommand after
+  // both. Commander has already enforced required positionals/options.
+  const args = coerceCommandArguments(metadata.args, input);
+  const formatExplicit = command.getOptionValueSource('format') === 'cli';
+  const format = parseOutputFormat(formatExplicit ? parsedOptions.format : defaultFormat);
+  const trace = parseTraceMode(parsedOptions.trace ?? 'off');
+  const verbose = parsedOptions.verbose === true;
 
   return {
     args,
@@ -182,10 +167,28 @@ export function parseCommandSurface(
     format,
     formatExplicit,
     trace,
-    ...(profile ? { profile } : {}),
     verbose,
-    help,
+    help: false,
   };
+}
+
+function makeStructuralCommand(
+  metadata: CommandSurfaceMetadata,
+  argv: readonly string[],
+): { root: Command; command: Command; parseArgv: string[] } {
+  const pathParts = (metadata.command ?? '').split('/').filter(Boolean);
+  const site = metadata.site ?? (pathParts.length > 1 ? pathParts[0] : undefined);
+  const name = metadata.name ?? pathParts.at(-1) ?? 'command';
+  if (!site) {
+    const command = new Command(name);
+    configureCommandSurface(command, metadata);
+    return { root: command, command, parseArgv: [...argv] };
+  }
+  const root = new Command('webcmd');
+  const siteCommand = root.command(site);
+  const command = siteCommand.command(name);
+  configureCommandSurface(command, metadata);
+  return { root, command, parseArgv: [site, name, ...argv] };
 }
 
 /** Apply the adapter's required/default/type/choice contract to raw values. */
@@ -249,27 +252,7 @@ export function coerceCommandArguments(
   return result;
 }
 
-function commandName(metadata: CommandSurfaceMetadata): string {
-  return metadata.command ?? ([metadata.site, metadata.name].filter(Boolean).join('/') || 'command');
-}
-
-function isOptionToken(value: string): boolean {
-  return value.length > 1 && value.startsWith('-');
-}
-
-function isNegativeNumberToken(value: string): boolean {
-  return /^-(\d+|\d*\.\d+)(e[+-]?\d+)?$/.test(value);
-}
-
-function readRequiredValue(argv: readonly string[], index: number, flag: string): string {
-  const value = argv[index];
-  if (value === undefined) {
-    throw new ArgumentError(`${flag} requires a value.`);
-  }
-  return value;
-}
-
-function parseOutputFormat(value: unknown): OutputFormat {
+export function parseOutputFormat(value: unknown): OutputFormat {
   if (OUTPUT_FORMATS.includes(value as OutputFormat)) return value as OutputFormat;
   throw new ArgumentError(`--format must be one of: ${OUTPUT_FORMATS.join(', ')}. Received: "${String(value)}"`);
 }
