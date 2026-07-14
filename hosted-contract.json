@@ -34384,5 +34384,2116 @@
       }
     }
   ],
-  "browserCommands": []
+  "browserCommands": [
+    {
+      "command": "analyze",
+      "aliases": [],
+      "description": "Classify site: anti-bot vendor, real-data API candidates, pattern (A/B/C/D), nearest adapter, next step",
+      "positionals": [
+        {
+          "name": "url",
+          "type": "string",
+          "description": "",
+          "positional": true,
+          "required": true,
+          "variadic": false
+        }
+      ],
+      "options": [
+        {
+          "name": "tab",
+          "type": "string",
+          "description": "Target tab/page identity returned by \"browser open\", \"browser tab new\", or \"browser tab list\"",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        }
+      ],
+      "sessionPolicy": "create-or-reuse",
+      "action": "analyze"
+    },
+    {
+      "command": "back",
+      "aliases": [],
+      "description": "Go back in browser history",
+      "positionals": [],
+      "options": [
+        {
+          "name": "tab",
+          "type": "string",
+          "description": "Target tab/page identity returned by \"browser open\", \"browser tab new\", or \"browser tab list\"",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        }
+      ],
+      "sessionPolicy": "require-existing",
+      "action": "back"
+    },
+    {
+      "command": "bind",
+      "aliases": [],
+      "description": "Bind an existing Cloak runtime tab to the browser session named by <session>",
+      "positionals": [],
+      "options": [
+        {
+          "name": "page",
+          "type": "string",
+          "description": "Cloak tab page id from `webcmd browser <session> tab list`",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "index",
+          "type": "string",
+          "description": "Cloak tab index from `webcmd browser <session> tab list`",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        }
+      ],
+      "sessionPolicy": "local-only"
+    },
+    {
+      "command": "check",
+      "aliases": [],
+      "description": "Ensure a checkbox/radio/aria-checked control is checked — JSON envelope {checked, changed, target, matches_n}",
+      "positionals": [
+        {
+          "name": "target",
+          "type": "string",
+          "description": "Numeric ref (from browser state / find), CSS selector, or omit when using --role/--name/etc.",
+          "positional": true,
+          "required": false,
+          "variadic": false
+        }
+      ],
+      "options": [
+        {
+          "name": "role",
+          "type": "string",
+          "description": "Semantic role (button, link, textbox, option, etc.)",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "description": "Accessible name contains text (aria-label, label, title, placeholder, or visible text)",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "label",
+          "type": "string",
+          "description": "Associated label contains text",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "text",
+          "type": "string",
+          "description": "Visible text contains text",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "testid",
+          "type": "string",
+          "description": "data-testid / data-test / test-id contains id",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "nth",
+          "type": "string",
+          "description": "When <target> is a multi-match CSS selector, pick the nth match (0-based)",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "tab",
+          "type": "string",
+          "description": "Target tab/page identity returned by \"browser open\", \"browser tab new\", or \"browser tab list\"",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        }
+      ],
+      "sessionPolicy": "require-existing",
+      "action": "check"
+    },
+    {
+      "command": "click",
+      "aliases": [],
+      "description": "Click element — JSON envelope {clicked, target, matches_n}",
+      "positionals": [
+        {
+          "name": "target",
+          "type": "string",
+          "description": "Numeric ref (from browser state / find), CSS selector, or omit when using --role/--name/etc.",
+          "positional": true,
+          "required": false,
+          "variadic": false
+        }
+      ],
+      "options": [
+        {
+          "name": "role",
+          "type": "string",
+          "description": "Semantic role (button, link, textbox, option, etc.)",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "description": "Accessible name contains text (aria-label, label, title, placeholder, or visible text)",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "label",
+          "type": "string",
+          "description": "Associated label contains text",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "text",
+          "type": "string",
+          "description": "Visible text contains text",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "testid",
+          "type": "string",
+          "description": "data-testid / data-test / test-id contains id",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "nth",
+          "type": "string",
+          "description": "When <target> is a multi-match CSS selector, pick the nth match (0-based)",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "tab",
+          "type": "string",
+          "description": "Target tab/page identity returned by \"browser open\", \"browser tab new\", or \"browser tab list\"",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        }
+      ],
+      "sessionPolicy": "require-existing",
+      "action": "click"
+    },
+    {
+      "command": "close",
+      "aliases": [],
+      "description": "Release the current browser session tab lease",
+      "positionals": [],
+      "options": [],
+      "sessionPolicy": "close-existing",
+      "action": "close-window"
+    },
+    {
+      "command": "console",
+      "aliases": [],
+      "description": "Read recent browser console messages",
+      "positionals": [],
+      "options": [
+        {
+          "name": "tab",
+          "type": "string",
+          "description": "Target tab/page identity returned by \"browser open\", \"browser tab new\", or \"browser tab list\"",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "level",
+          "type": "string",
+          "description": "Console level: all, error, warning, log, info, debug",
+          "positional": false,
+          "required": false,
+          "variadic": false,
+          "default": "all"
+        },
+        {
+          "name": "since",
+          "type": "string",
+          "description": "Only include messages from the last duration (for example: 30s, 2m)",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "until",
+          "type": "string",
+          "description": "Only include messages older than the duration from now",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "follow",
+          "type": "boolean",
+          "description": "Continuously print new console messages as JSON lines",
+          "positional": false,
+          "required": false,
+          "variadic": false,
+          "default": false
+        }
+      ],
+      "sessionPolicy": "require-existing",
+      "action": "console"
+    },
+    {
+      "command": "dblclick",
+      "aliases": [],
+      "description": "Double-click element — JSON envelope {dblclicked, target, matches_n}",
+      "positionals": [
+        {
+          "name": "target",
+          "type": "string",
+          "description": "Numeric ref (from browser state / find), CSS selector, or omit when using --role/--name/etc.",
+          "positional": true,
+          "required": false,
+          "variadic": false
+        }
+      ],
+      "options": [
+        {
+          "name": "role",
+          "type": "string",
+          "description": "Semantic role (button, link, textbox, option, etc.)",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "description": "Accessible name contains text (aria-label, label, title, placeholder, or visible text)",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "label",
+          "type": "string",
+          "description": "Associated label contains text",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "text",
+          "type": "string",
+          "description": "Visible text contains text",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "testid",
+          "type": "string",
+          "description": "data-testid / data-test / test-id contains id",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "nth",
+          "type": "string",
+          "description": "When <target> is a multi-match CSS selector, pick the nth match (0-based)",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "tab",
+          "type": "string",
+          "description": "Target tab/page identity returned by \"browser open\", \"browser tab new\", or \"browser tab list\"",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        }
+      ],
+      "sessionPolicy": "require-existing",
+      "action": "dblclick"
+    },
+    {
+      "command": "dialog/accept",
+      "aliases": [],
+      "description": "Accept the currently open JavaScript dialog",
+      "positionals": [],
+      "options": [
+        {
+          "name": "text",
+          "type": "string",
+          "description": "Prompt text to submit for prompt() dialogs",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "tab",
+          "type": "string",
+          "description": "Target tab/page identity returned by \"browser open\", \"browser tab new\", or \"browser tab list\"",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        }
+      ],
+      "sessionPolicy": "require-existing",
+      "action": "dialog-accept"
+    },
+    {
+      "command": "dialog/dismiss",
+      "aliases": [],
+      "description": "Dismiss the currently open JavaScript dialog",
+      "positionals": [],
+      "options": [
+        {
+          "name": "tab",
+          "type": "string",
+          "description": "Target tab/page identity returned by \"browser open\", \"browser tab new\", or \"browser tab list\"",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        }
+      ],
+      "sessionPolicy": "require-existing",
+      "action": "dialog-dismiss"
+    },
+    {
+      "command": "drag",
+      "aliases": [],
+      "description": "Drag one element to another — JSON envelope {dragged, source, target, source_matches_n, target_matches_n}",
+      "positionals": [
+        {
+          "name": "source",
+          "type": "string",
+          "description": "Numeric ref/CSS selector to drag from, or omit with --from-role/--from-name/etc.",
+          "positional": true,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "target",
+          "type": "string",
+          "description": "Numeric ref/CSS selector to drop onto, or omit with --to-role/--to-name/etc.",
+          "positional": true,
+          "required": false,
+          "variadic": false
+        }
+      ],
+      "options": [
+        {
+          "name": "fromRole",
+          "type": "string",
+          "description": "from semantic role",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "fromName",
+          "type": "string",
+          "description": "from accessible name contains text",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "fromLabel",
+          "type": "string",
+          "description": "from associated label contains text",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "fromText",
+          "type": "string",
+          "description": "from visible text contains text",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "fromTestid",
+          "type": "string",
+          "description": "from data-testid / data-test / test-id contains id",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "toRole",
+          "type": "string",
+          "description": "to semantic role",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "toName",
+          "type": "string",
+          "description": "to accessible name contains text",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "toLabel",
+          "type": "string",
+          "description": "to associated label contains text",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "toText",
+          "type": "string",
+          "description": "to visible text contains text",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "toTestid",
+          "type": "string",
+          "description": "to data-testid / data-test / test-id contains id",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "fromNth",
+          "type": "string",
+          "description": "When <source> is a multi-match CSS selector, pick the nth match (0-based)",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "toNth",
+          "type": "string",
+          "description": "When <target> is a multi-match CSS selector, pick the nth match (0-based)",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "tab",
+          "type": "string",
+          "description": "Target tab/page identity returned by \"browser open\", \"browser tab new\", or \"browser tab list\"",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        }
+      ],
+      "sessionPolicy": "require-existing",
+      "action": "drag"
+    },
+    {
+      "command": "eval",
+      "aliases": [],
+      "description": "Execute JS in page context, return result",
+      "positionals": [
+        {
+          "name": "js",
+          "type": "string",
+          "description": "JavaScript code",
+          "positional": true,
+          "required": true,
+          "variadic": false
+        }
+      ],
+      "options": [
+        {
+          "name": "frame",
+          "type": "string",
+          "description": "Cross-origin iframe index from \"browser frames\"",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "tab",
+          "type": "string",
+          "description": "Target tab/page identity returned by \"browser open\", \"browser tab new\", or \"browser tab list\"",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        }
+      ],
+      "sessionPolicy": "require-existing",
+      "action": "exec"
+    },
+    {
+      "command": "extract",
+      "aliases": [],
+      "description": "Extract page content as markdown, paragraph-aware chunks for long pages",
+      "positionals": [],
+      "options": [
+        {
+          "name": "selector",
+          "type": "string",
+          "description": "CSS selector scope; defaults to <main>/<article>/<body>",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "chunkSize",
+          "type": "string",
+          "description": "Target chunk size in chars",
+          "positional": false,
+          "required": false,
+          "variadic": false,
+          "default": "20000"
+        },
+        {
+          "name": "start",
+          "type": "string",
+          "description": "Start offset (use next_start_char from a previous extract)",
+          "positional": false,
+          "required": false,
+          "variadic": false,
+          "default": "0"
+        },
+        {
+          "name": "tab",
+          "type": "string",
+          "description": "Target tab/page identity returned by \"browser open\", \"browser tab new\", or \"browser tab list\"",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        }
+      ],
+      "sessionPolicy": "require-existing",
+      "action": "extract"
+    },
+    {
+      "command": "fill",
+      "aliases": [],
+      "description": "Set input/textarea/contenteditable text exactly and verify the value — JSON envelope {filled, verified, text, actual}",
+      "positionals": [
+        {
+          "name": "targetOrText",
+          "type": "string",
+          "description": "Numeric ref/CSS target, or text when using --role/--name/etc.",
+          "positional": true,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "text",
+          "type": "string",
+          "description": "Text to set exactly",
+          "positional": true,
+          "required": false,
+          "variadic": false
+        }
+      ],
+      "options": [
+        {
+          "name": "role",
+          "type": "string",
+          "description": "Semantic role (button, link, textbox, option, etc.)",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "description": "Accessible name contains text (aria-label, label, title, placeholder, or visible text)",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "label",
+          "type": "string",
+          "description": "Associated label contains text",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "text",
+          "type": "string",
+          "description": "Visible text contains text",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "testid",
+          "type": "string",
+          "description": "data-testid / data-test / test-id contains id",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "nth",
+          "type": "string",
+          "description": "When <target> is a multi-match CSS selector, pick the nth match (0-based)",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "tab",
+          "type": "string",
+          "description": "Target tab/page identity returned by \"browser open\", \"browser tab new\", or \"browser tab list\"",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        }
+      ],
+      "sessionPolicy": "require-existing",
+      "action": "fill"
+    },
+    {
+      "command": "find",
+      "aliases": [],
+      "description": "Find DOM elements by CSS or semantic locator — returns JSON {matches_n, entries[]}",
+      "positionals": [],
+      "options": [
+        {
+          "name": "role",
+          "type": "string",
+          "description": "Semantic role (button, link, textbox, option, etc.)",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "description": "Accessible name contains text (aria-label, label, title, placeholder, or visible text)",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "label",
+          "type": "string",
+          "description": "Associated label contains text",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "text",
+          "type": "string",
+          "description": "Visible text contains text",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "testid",
+          "type": "string",
+          "description": "data-testid / data-test / test-id contains id",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "css",
+          "type": "string",
+          "description": "CSS selector (required)",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "limit",
+          "type": "string",
+          "description": "Max entries returned",
+          "positional": false,
+          "required": false,
+          "variadic": false,
+          "default": "50"
+        },
+        {
+          "name": "textMax",
+          "type": "string",
+          "description": "Max chars of trimmed text per entry",
+          "positional": false,
+          "required": false,
+          "variadic": false,
+          "default": "120"
+        },
+        {
+          "name": "tab",
+          "type": "string",
+          "description": "Target tab/page identity returned by \"browser open\", \"browser tab new\", or \"browser tab list\"",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        }
+      ],
+      "sessionPolicy": "require-existing",
+      "action": "find"
+    },
+    {
+      "command": "focus",
+      "aliases": [],
+      "description": "Focus an element — JSON envelope {focused, target, matches_n}",
+      "positionals": [
+        {
+          "name": "target",
+          "type": "string",
+          "description": "Numeric ref (from browser state / find), CSS selector, or omit when using --role/--name/etc.",
+          "positional": true,
+          "required": false,
+          "variadic": false
+        }
+      ],
+      "options": [
+        {
+          "name": "role",
+          "type": "string",
+          "description": "Semantic role (button, link, textbox, option, etc.)",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "description": "Accessible name contains text (aria-label, label, title, placeholder, or visible text)",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "label",
+          "type": "string",
+          "description": "Associated label contains text",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "text",
+          "type": "string",
+          "description": "Visible text contains text",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "testid",
+          "type": "string",
+          "description": "data-testid / data-test / test-id contains id",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "nth",
+          "type": "string",
+          "description": "When <target> is a multi-match CSS selector, pick the nth match (0-based)",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "tab",
+          "type": "string",
+          "description": "Target tab/page identity returned by \"browser open\", \"browser tab new\", or \"browser tab list\"",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        }
+      ],
+      "sessionPolicy": "require-existing",
+      "action": "focus"
+    },
+    {
+      "command": "frames",
+      "aliases": [],
+      "description": "List cross-origin iframe targets in snapshot order",
+      "positionals": [],
+      "options": [
+        {
+          "name": "tab",
+          "type": "string",
+          "description": "Target tab/page identity returned by \"browser open\", \"browser tab new\", or \"browser tab list\"",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        }
+      ],
+      "sessionPolicy": "require-existing",
+      "action": "frames"
+    },
+    {
+      "command": "get/attributes",
+      "aliases": [],
+      "description": "Element attributes — JSON envelope {value, matches_n}",
+      "positionals": [
+        {
+          "name": "target",
+          "type": "string",
+          "description": "Numeric ref (from browser state / find), CSS selector, or omit when using --role/--name/etc.",
+          "positional": true,
+          "required": false,
+          "variadic": false
+        }
+      ],
+      "options": [
+        {
+          "name": "role",
+          "type": "string",
+          "description": "Semantic role (button, link, textbox, option, etc.)",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "description": "Accessible name contains text (aria-label, label, title, placeholder, or visible text)",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "label",
+          "type": "string",
+          "description": "Associated label contains text",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "text",
+          "type": "string",
+          "description": "Visible text contains text",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "testid",
+          "type": "string",
+          "description": "data-testid / data-test / test-id contains id",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "nth",
+          "type": "string",
+          "description": "Pick the nth match (0-based) when <target> is a multi-match CSS selector",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "tab",
+          "type": "string",
+          "description": "Target tab/page identity returned by \"browser open\", \"browser tab new\", or \"browser tab list\"",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        }
+      ],
+      "sessionPolicy": "require-existing",
+      "action": "get-attributes"
+    },
+    {
+      "command": "get/html",
+      "aliases": [],
+      "description": "Page HTML (or scoped); use --as json for a {tag, attrs, text, children} tree",
+      "positionals": [],
+      "options": [
+        {
+          "name": "selector",
+          "type": "string",
+          "description": "CSS selector scope (first match)",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "as",
+          "type": "string",
+          "description": "Output format: \"html\" (default) or \"json\" for structured tree",
+          "positional": false,
+          "required": false,
+          "variadic": false,
+          "default": "html"
+        },
+        {
+          "name": "max",
+          "type": "string",
+          "description": "Max characters of raw HTML to return (0 = unlimited)",
+          "positional": false,
+          "required": false,
+          "variadic": false,
+          "default": "0"
+        },
+        {
+          "name": "depth",
+          "type": "string",
+          "description": "(--as json) Max tree depth below root (0 = root only, 0 disables = unlimited via empty)",
+          "positional": false,
+          "required": false,
+          "variadic": false,
+          "default": ""
+        },
+        {
+          "name": "childrenMax",
+          "type": "string",
+          "description": "(--as json) Max element children kept per node (empty = unlimited)",
+          "positional": false,
+          "required": false,
+          "variadic": false,
+          "default": ""
+        },
+        {
+          "name": "textMax",
+          "type": "string",
+          "description": "(--as json) Max chars of direct text kept per node (empty = unlimited)",
+          "positional": false,
+          "required": false,
+          "variadic": false,
+          "default": ""
+        },
+        {
+          "name": "tab",
+          "type": "string",
+          "description": "Target tab/page identity returned by \"browser open\", \"browser tab new\", or \"browser tab list\"",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        }
+      ],
+      "sessionPolicy": "require-existing",
+      "action": "get-html"
+    },
+    {
+      "command": "get/text",
+      "aliases": [],
+      "description": "Element text content — JSON envelope {value, matches_n}",
+      "positionals": [
+        {
+          "name": "target",
+          "type": "string",
+          "description": "Numeric ref (from browser state / find), CSS selector, or omit when using --role/--name/etc.",
+          "positional": true,
+          "required": false,
+          "variadic": false
+        }
+      ],
+      "options": [
+        {
+          "name": "role",
+          "type": "string",
+          "description": "Semantic role (button, link, textbox, option, etc.)",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "description": "Accessible name contains text (aria-label, label, title, placeholder, or visible text)",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "label",
+          "type": "string",
+          "description": "Associated label contains text",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "text",
+          "type": "string",
+          "description": "Visible text contains text",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "testid",
+          "type": "string",
+          "description": "data-testid / data-test / test-id contains id",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "nth",
+          "type": "string",
+          "description": "Pick the nth match (0-based) when <target> is a multi-match CSS selector",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "tab",
+          "type": "string",
+          "description": "Target tab/page identity returned by \"browser open\", \"browser tab new\", or \"browser tab list\"",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        }
+      ],
+      "sessionPolicy": "require-existing",
+      "action": "get-text"
+    },
+    {
+      "command": "get/title",
+      "aliases": [],
+      "description": "Page title",
+      "positionals": [],
+      "options": [
+        {
+          "name": "tab",
+          "type": "string",
+          "description": "Target tab/page identity returned by \"browser open\", \"browser tab new\", or \"browser tab list\"",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        }
+      ],
+      "sessionPolicy": "require-existing",
+      "action": "get-title"
+    },
+    {
+      "command": "get/url",
+      "aliases": [],
+      "description": "Current page URL",
+      "positionals": [],
+      "options": [
+        {
+          "name": "tab",
+          "type": "string",
+          "description": "Target tab/page identity returned by \"browser open\", \"browser tab new\", or \"browser tab list\"",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        }
+      ],
+      "sessionPolicy": "require-existing",
+      "action": "get-url"
+    },
+    {
+      "command": "get/value",
+      "aliases": [],
+      "description": "Input/textarea value — JSON envelope {value, matches_n}",
+      "positionals": [
+        {
+          "name": "target",
+          "type": "string",
+          "description": "Numeric ref (from browser state / find), CSS selector, or omit when using --role/--name/etc.",
+          "positional": true,
+          "required": false,
+          "variadic": false
+        }
+      ],
+      "options": [
+        {
+          "name": "role",
+          "type": "string",
+          "description": "Semantic role (button, link, textbox, option, etc.)",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "description": "Accessible name contains text (aria-label, label, title, placeholder, or visible text)",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "label",
+          "type": "string",
+          "description": "Associated label contains text",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "text",
+          "type": "string",
+          "description": "Visible text contains text",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "testid",
+          "type": "string",
+          "description": "data-testid / data-test / test-id contains id",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "nth",
+          "type": "string",
+          "description": "Pick the nth match (0-based) when <target> is a multi-match CSS selector",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "tab",
+          "type": "string",
+          "description": "Target tab/page identity returned by \"browser open\", \"browser tab new\", or \"browser tab list\"",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        }
+      ],
+      "sessionPolicy": "require-existing",
+      "action": "get-value"
+    },
+    {
+      "command": "hover",
+      "aliases": [],
+      "description": "Move the mouse over an element — JSON envelope {hovered, target, matches_n}",
+      "positionals": [
+        {
+          "name": "target",
+          "type": "string",
+          "description": "Numeric ref (from browser state / find), CSS selector, or omit when using --role/--name/etc.",
+          "positional": true,
+          "required": false,
+          "variadic": false
+        }
+      ],
+      "options": [
+        {
+          "name": "role",
+          "type": "string",
+          "description": "Semantic role (button, link, textbox, option, etc.)",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "description": "Accessible name contains text (aria-label, label, title, placeholder, or visible text)",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "label",
+          "type": "string",
+          "description": "Associated label contains text",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "text",
+          "type": "string",
+          "description": "Visible text contains text",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "testid",
+          "type": "string",
+          "description": "data-testid / data-test / test-id contains id",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "nth",
+          "type": "string",
+          "description": "When <target> is a multi-match CSS selector, pick the nth match (0-based)",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "tab",
+          "type": "string",
+          "description": "Target tab/page identity returned by \"browser open\", \"browser tab new\", or \"browser tab list\"",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        }
+      ],
+      "sessionPolicy": "require-existing",
+      "action": "hover"
+    },
+    {
+      "command": "init",
+      "aliases": [],
+      "description": "Generate adapter scaffold in ~/.webcmd/clis/",
+      "positionals": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "Adapter name in site/command format (e.g. hn/top)",
+          "positional": true,
+          "required": true,
+          "variadic": false
+        }
+      ],
+      "options": [],
+      "sessionPolicy": "require-existing",
+      "action": "init"
+    },
+    {
+      "command": "keys",
+      "aliases": [],
+      "description": "Press keyboard key",
+      "positionals": [
+        {
+          "name": "key",
+          "type": "string",
+          "description": "Key to press (Enter, Escape, Tab, Control+a)",
+          "positional": true,
+          "required": true,
+          "variadic": false
+        }
+      ],
+      "options": [
+        {
+          "name": "tab",
+          "type": "string",
+          "description": "Target tab/page identity returned by \"browser open\", \"browser tab new\", or \"browser tab list\"",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        }
+      ],
+      "sessionPolicy": "require-existing",
+      "action": "press-key"
+    },
+    {
+      "command": "network",
+      "aliases": [],
+      "description": "Capture network requests as shape previews; retrieve full bodies by key",
+      "positionals": [],
+      "options": [
+        {
+          "name": "tab",
+          "type": "string",
+          "description": "Target tab/page identity returned by \"browser open\", \"browser tab new\", or \"browser tab list\"",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "detail",
+          "type": "string",
+          "description": "Emit full body for the entry with this key",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "all",
+          "type": "boolean",
+          "description": "Include static resources (js/css/images/telemetry)",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "raw",
+          "type": "boolean",
+          "description": "Emit full bodies for every entry (skip shape preview)",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "filter",
+          "type": "string",
+          "description": "Comma-separated field names; keep only entries whose body shape has ALL names as path segments",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "since",
+          "type": "string",
+          "description": "Only include entries from the last duration (for example: 30s, 2m)",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "until",
+          "type": "string",
+          "description": "Only include entries older than the duration from now",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "follow",
+          "type": "boolean",
+          "description": "Continuously print new matching entries as JSON lines",
+          "positional": false,
+          "required": false,
+          "variadic": false,
+          "default": false
+        },
+        {
+          "name": "failed",
+          "type": "boolean",
+          "description": "Only include failed HTTP requests (status 0 or >= 400)",
+          "positional": false,
+          "required": false,
+          "variadic": false,
+          "default": false
+        },
+        {
+          "name": "maxBody",
+          "type": "string",
+          "description": "With --detail: cap the emitted body at N chars (0 = unlimited, default)",
+          "positional": false,
+          "required": false,
+          "variadic": false,
+          "default": "0"
+        },
+        {
+          "name": "ttl",
+          "type": "string",
+          "description": "Cache TTL in ms for --detail lookups",
+          "positional": false,
+          "required": false,
+          "variadic": false,
+          "default": "86400000"
+        }
+      ],
+      "sessionPolicy": "require-existing",
+      "action": "network"
+    },
+    {
+      "command": "open",
+      "aliases": [],
+      "description": "Open URL in the browser session",
+      "positionals": [
+        {
+          "name": "url",
+          "type": "string",
+          "description": "",
+          "positional": true,
+          "required": true,
+          "variadic": false
+        }
+      ],
+      "options": [
+        {
+          "name": "tab",
+          "type": "string",
+          "description": "Target tab/page identity returned by \"browser open\", \"browser tab new\", or \"browser tab list\"",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        }
+      ],
+      "sessionPolicy": "create-or-reuse",
+      "action": "navigate"
+    },
+    {
+      "command": "screenshot",
+      "aliases": [],
+      "description": "Take screenshot",
+      "positionals": [
+        {
+          "name": "path",
+          "type": "string",
+          "description": "Save to file (base64 if omitted)",
+          "positional": true,
+          "required": false,
+          "variadic": false
+        }
+      ],
+      "options": [
+        {
+          "name": "tab",
+          "type": "string",
+          "description": "Target tab/page identity returned by \"browser open\", \"browser tab new\", or \"browser tab list\"",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "fullPage",
+          "type": "boolean",
+          "description": "Capture the full scrollable page, not just the viewport",
+          "positional": false,
+          "required": false,
+          "variadic": false,
+          "default": false
+        },
+        {
+          "name": "annotate",
+          "type": "boolean",
+          "description": "Overlay visible browser state ref labels on the screenshot",
+          "positional": false,
+          "required": false,
+          "variadic": false,
+          "default": false
+        },
+        {
+          "name": "width",
+          "type": "string",
+          "description": "Override viewport width in CSS pixels for this screenshot only",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "height",
+          "type": "string",
+          "description": "Override viewport height in CSS pixels for this screenshot only (ignored with --full-page)",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        }
+      ],
+      "sessionPolicy": "require-existing",
+      "action": "screenshot"
+    },
+    {
+      "command": "scroll",
+      "aliases": [],
+      "description": "Scroll page",
+      "positionals": [
+        {
+          "name": "direction",
+          "type": "string",
+          "description": "up or down",
+          "positional": true,
+          "required": true,
+          "variadic": false
+        }
+      ],
+      "options": [
+        {
+          "name": "amount",
+          "type": "string",
+          "description": "Pixels to scroll",
+          "positional": false,
+          "required": false,
+          "variadic": false,
+          "default": "500"
+        },
+        {
+          "name": "tab",
+          "type": "string",
+          "description": "Target tab/page identity returned by \"browser open\", \"browser tab new\", or \"browser tab list\"",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        }
+      ],
+      "sessionPolicy": "require-existing",
+      "action": "scroll"
+    },
+    {
+      "command": "select",
+      "aliases": [],
+      "description": "Select dropdown option — JSON envelope {selected, target, matches_n}",
+      "positionals": [
+        {
+          "name": "targetOrOption",
+          "type": "string",
+          "description": "Numeric ref/CSS target, or option text when using --role/--name/etc.",
+          "positional": true,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "option",
+          "type": "string",
+          "description": "Option text (or value) to select",
+          "positional": true,
+          "required": false,
+          "variadic": false
+        }
+      ],
+      "options": [
+        {
+          "name": "role",
+          "type": "string",
+          "description": "Semantic role (button, link, textbox, option, etc.)",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "description": "Accessible name contains text (aria-label, label, title, placeholder, or visible text)",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "label",
+          "type": "string",
+          "description": "Associated label contains text",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "text",
+          "type": "string",
+          "description": "Visible text contains text",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "testid",
+          "type": "string",
+          "description": "data-testid / data-test / test-id contains id",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "nth",
+          "type": "string",
+          "description": "When <target> is a multi-match CSS selector, pick the nth match (0-based)",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "tab",
+          "type": "string",
+          "description": "Target tab/page identity returned by \"browser open\", \"browser tab new\", or \"browser tab list\"",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        }
+      ],
+      "sessionPolicy": "require-existing",
+      "action": "select"
+    },
+    {
+      "command": "state",
+      "aliases": [],
+      "description": "Page state: URL, title, interactive elements with [N] indices",
+      "positionals": [],
+      "options": [
+        {
+          "name": "source",
+          "type": "string",
+          "description": "Snapshot backend: dom (default) or ax prototype",
+          "positional": false,
+          "required": false,
+          "variadic": false,
+          "default": "dom"
+        },
+        {
+          "name": "compareSources",
+          "type": "boolean",
+          "description": "Print DOM vs AX snapshot metrics for observation promotion decisions",
+          "positional": false,
+          "required": false,
+          "variadic": false,
+          "default": false
+        },
+        {
+          "name": "tab",
+          "type": "string",
+          "description": "Target tab/page identity returned by \"browser open\", \"browser tab new\", or \"browser tab list\"",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        }
+      ],
+      "sessionPolicy": "require-existing",
+      "action": "snapshot"
+    },
+    {
+      "command": "tab/close",
+      "aliases": [],
+      "description": "Close a tab by target ID",
+      "positionals": [
+        {
+          "name": "targetId",
+          "type": "string",
+          "description": "Target tab/page identity returned by \"browser open\", \"browser tab new\", or \"browser tab list\"",
+          "positional": true,
+          "required": false,
+          "variadic": false
+        }
+      ],
+      "options": [
+        {
+          "name": "tab",
+          "type": "string",
+          "description": "Target tab/page identity returned by \"browser open\", \"browser tab new\", or \"browser tab list\"",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        }
+      ],
+      "sessionPolicy": "require-existing",
+      "action": "tabs"
+    },
+    {
+      "command": "tab/list",
+      "aliases": [],
+      "description": "List tabs in the browser session with target IDs",
+      "positionals": [],
+      "options": [],
+      "sessionPolicy": "require-existing",
+      "action": "tabs"
+    },
+    {
+      "command": "tab/new",
+      "aliases": [],
+      "description": "Create a new tab and print its target ID",
+      "positionals": [
+        {
+          "name": "url",
+          "type": "string",
+          "description": "Optional URL to open in the new tab",
+          "positional": true,
+          "required": false,
+          "variadic": false
+        }
+      ],
+      "options": [],
+      "sessionPolicy": "require-existing",
+      "action": "tabs"
+    },
+    {
+      "command": "tab/select",
+      "aliases": [],
+      "description": "Select a tab by target ID and make it the default browser tab",
+      "positionals": [
+        {
+          "name": "targetId",
+          "type": "string",
+          "description": "Target tab/page identity returned by \"browser open\", \"browser tab new\", or \"browser tab list\"",
+          "positional": true,
+          "required": false,
+          "variadic": false
+        }
+      ],
+      "options": [
+        {
+          "name": "tab",
+          "type": "string",
+          "description": "Target tab/page identity returned by \"browser open\", \"browser tab new\", or \"browser tab list\"",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        }
+      ],
+      "sessionPolicy": "require-existing",
+      "action": "tabs"
+    },
+    {
+      "command": "type",
+      "aliases": [],
+      "description": "Click element, then type text — JSON envelope {typed, text, target, matches_n, autocomplete}",
+      "positionals": [
+        {
+          "name": "targetOrText",
+          "type": "string",
+          "description": "Numeric ref/CSS target, or text when using --role/--name/etc.",
+          "positional": true,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "text",
+          "type": "string",
+          "description": "Text to type",
+          "positional": true,
+          "required": false,
+          "variadic": false
+        }
+      ],
+      "options": [
+        {
+          "name": "role",
+          "type": "string",
+          "description": "Semantic role (button, link, textbox, option, etc.)",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "description": "Accessible name contains text (aria-label, label, title, placeholder, or visible text)",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "label",
+          "type": "string",
+          "description": "Associated label contains text",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "text",
+          "type": "string",
+          "description": "Visible text contains text",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "testid",
+          "type": "string",
+          "description": "data-testid / data-test / test-id contains id",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "nth",
+          "type": "string",
+          "description": "When <target> is a multi-match CSS selector, pick the nth match (0-based)",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "tab",
+          "type": "string",
+          "description": "Target tab/page identity returned by \"browser open\", \"browser tab new\", or \"browser tab list\"",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        }
+      ],
+      "sessionPolicy": "require-existing",
+      "action": "type"
+    },
+    {
+      "command": "unbind",
+      "aliases": [],
+      "description": "Compatibility command; release the Cloak browser session named by <session>",
+      "positionals": [],
+      "options": [],
+      "sessionPolicy": "close-existing",
+      "action": "close-window"
+    },
+    {
+      "command": "uncheck",
+      "aliases": [],
+      "description": "Ensure a checkbox/aria-checked control is unchecked — JSON envelope {checked, changed, target, matches_n}",
+      "positionals": [
+        {
+          "name": "target",
+          "type": "string",
+          "description": "Numeric ref (from browser state / find), CSS selector, or omit when using --role/--name/etc.",
+          "positional": true,
+          "required": false,
+          "variadic": false
+        }
+      ],
+      "options": [
+        {
+          "name": "role",
+          "type": "string",
+          "description": "Semantic role (button, link, textbox, option, etc.)",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "description": "Accessible name contains text (aria-label, label, title, placeholder, or visible text)",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "label",
+          "type": "string",
+          "description": "Associated label contains text",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "text",
+          "type": "string",
+          "description": "Visible text contains text",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "testid",
+          "type": "string",
+          "description": "data-testid / data-test / test-id contains id",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "nth",
+          "type": "string",
+          "description": "When <target> is a multi-match CSS selector, pick the nth match (0-based)",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "tab",
+          "type": "string",
+          "description": "Target tab/page identity returned by \"browser open\", \"browser tab new\", or \"browser tab list\"",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        }
+      ],
+      "sessionPolicy": "require-existing",
+      "action": "uncheck"
+    },
+    {
+      "command": "upload",
+      "aliases": [],
+      "description": "Attach local files to a file input — JSON envelope {uploaded, files, file_names, target, matches_n}",
+      "positionals": [
+        {
+          "name": "targetOrFile",
+          "type": "string",
+          "description": "Numeric ref/CSS target, or first file when using --role/--name/etc.",
+          "positional": true,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "files",
+          "type": "string",
+          "description": "Local file path(s) to attach",
+          "positional": true,
+          "required": false,
+          "variadic": true
+        }
+      ],
+      "options": [
+        {
+          "name": "role",
+          "type": "string",
+          "description": "Semantic role (button, link, textbox, option, etc.)",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "description": "Accessible name contains text (aria-label, label, title, placeholder, or visible text)",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "label",
+          "type": "string",
+          "description": "Associated label contains text",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "text",
+          "type": "string",
+          "description": "Visible text contains text",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "testid",
+          "type": "string",
+          "description": "data-testid / data-test / test-id contains id",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "nth",
+          "type": "string",
+          "description": "When <target> is a multi-match CSS selector, pick the nth match (0-based)",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "tab",
+          "type": "string",
+          "description": "Target tab/page identity returned by \"browser open\", \"browser tab new\", or \"browser tab list\"",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        }
+      ],
+      "sessionPolicy": "require-existing",
+      "action": "set-file-input"
+    },
+    {
+      "command": "verify",
+      "aliases": [],
+      "description": "Execute an adapter and validate output; uses fixture at ~/.webcmd/sites/<site>/verify/<cmd>.json when present",
+      "positionals": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "Adapter name in site/command format (e.g. hn/top)",
+          "positional": true,
+          "required": true,
+          "variadic": false
+        }
+      ],
+      "options": [
+        {
+          "name": "writeFixture",
+          "type": "boolean",
+          "description": "Write a starter fixture to ~/.webcmd/sites/<site>/verify/<command>.json if none exists",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "updateFixture",
+          "type": "boolean",
+          "description": "Overwrite an existing fixture with one derived from current output",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "fixture",
+          "type": "boolean",
+          "description": "Ignore any fixture file for this run (no value-level validation)",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "strictMemory",
+          "type": "boolean",
+          "description": "Fail (not just warn) when ~/.webcmd/sites/<site>/endpoints.json or notes.md is missing",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "seedArgs",
+          "type": "string",
+          "description": "Seed args when no fixture exists; use JSON array/object for multiple args or flags",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "trace",
+          "type": "string",
+          "description": "Trace capture for the adapter subprocess: off, on, retain-on-failure",
+          "positional": false,
+          "required": false,
+          "variadic": false,
+          "default": "off"
+        }
+      ],
+      "sessionPolicy": "require-existing",
+      "action": "verify"
+    },
+    {
+      "command": "wait",
+      "aliases": [],
+      "description": "Wait for selector, text, time, matching XHR, or browser download (e.g. wait selector \".loaded\", wait text \"Success\", wait time 3, wait xhr \"/api/search\", wait download receipt.pdf)",
+      "positionals": [
+        {
+          "name": "type",
+          "type": "string",
+          "description": "selector, text, time, xhr, or download",
+          "positional": true,
+          "required": true,
+          "variadic": false
+        },
+        {
+          "name": "value",
+          "type": "string",
+          "description": "CSS selector, text string, seconds, XHR URL regex, or download filename/URL pattern",
+          "positional": true,
+          "required": false,
+          "variadic": false
+        }
+      ],
+      "options": [
+        {
+          "name": "tab",
+          "type": "string",
+          "description": "Target tab/page identity returned by \"browser open\", \"browser tab new\", or \"browser tab list\"",
+          "positional": false,
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "timeout",
+          "type": "string",
+          "description": "Timeout in milliseconds",
+          "positional": false,
+          "required": false,
+          "variadic": false,
+          "default": "10000"
+        }
+      ],
+      "sessionPolicy": "require-existing",
+      "action": "wait"
+    }
+  ]
 }

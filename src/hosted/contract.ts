@@ -1,5 +1,6 @@
 import { commandHelpData } from '../help.js';
 import type { Arg, CliCommand } from '../registry.js';
+import { browserCommandCatalog } from '../browser/command-catalog.js';
 import {
   deriveBrowserAvailability,
   deriveHostedAvailability,
@@ -281,10 +282,13 @@ function normalizeBrowserCatalog(
 
 export function buildHostedContract(
   commands: readonly HostedContractCommandInput[],
-  browserCatalog: readonly HostedBrowserCommandContract[],
+  browserCatalogInput: readonly HostedBrowserCommandContract[],
   packageVersion: string,
 ): HostedContract {
   assertUniqueAdapterCommands(commands);
+  const browserCatalog = browserCatalogInput.length > 0
+    ? browserCatalogInput
+    : browserCommandCatalog;
   const shared = sharedContractOptions();
   const contractCommands = commands.map((command): HostedContractCommand => {
     const availability = deriveHostedAvailability(command);

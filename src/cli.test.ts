@@ -523,6 +523,7 @@ name: 'search',
       expect(data.command).toBe('webcmd browser');
       expect(data.description).toBe('Browser control — navigate, click, type, extract, wait (no LLM needed)');
       expect(data.command_count).toBeGreaterThan(20);
+      expect(data.commands.map((cmd: any) => cmd.name)).toContain('bind');
       // `--session` is now a hidden internal option; user-facing surface is the
       // <session> positional declared via `.usage()`. Structured help drops
       // hidden options, so namespace_options shouldn't expose it.
