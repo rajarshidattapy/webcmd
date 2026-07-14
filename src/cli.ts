@@ -15,14 +15,14 @@ import { findPackageRoot, getBuiltEntryCandidates } from './package-paths.js';
 import { type CliCommand, getRegistry } from './registry.js';
 import { commandListPresentation, toPresentableCommand } from './command-presentation.js';
 import { configureCompletionCommandSurface, configureListCommandSurface } from './builtin-command-surface.js';
-import { render as renderOutput } from './output.js';
+import { formatErrorEnvelope, render as renderOutput } from './output.js';
 import { PKG_VERSION } from './version.js';
 import { printCompletionScript } from './completion.js';
 import { loadExternalClis, executeExternalCli, installExternalCli, registerExternalCli, isBinaryInstalled, formatExternalCliLabel } from './external.js';
 import { installWebcmdSkill, listWebcmdSkills, updateWebcmdSkill, type WebcmdSkillInstallResult } from './skills.js';
 import { registerAllCommands } from './commanderAdapter.js';
 import { buildRootHelpPresentation, classifyAdapter, installCommanderNamespaceStructuredHelp, installRootPresentationHelp, leadingPositionalFromUsage, rootHelpData, type RootAdapterGroups } from './help.js';
-import { EXIT_CODES, getErrorMessage, BrowserConnectError, CliError, ArgumentError } from './errors.js';
+import { EXIT_CODES, getErrorMessage, BrowserConnectError, CliError, ArgumentError, toEnvelope } from './errors.js';
 import { TargetError, type TargetErrorCode } from './browser/target-errors.js';
 import { resolveTargetJs, getTextResolvedJs, getValueResolvedJs, getAttributesResolvedJs, selectResolvedJs, isAutocompleteResolvedJs, type ResolveOptions, type TargetMatchLevel } from './browser/target-resolver.js';
 import { buildFindJs, buildSemanticFindJs, isFindError, type FindResult, type FindError, type SemanticFindOptions } from './browser/find.js';
@@ -3026,8 +3026,13 @@ cli({
     });
 
   configureCompletionCommandSurface(program.command('completion'))
-    .action((shell) => {
-      printCompletionScript(shell);
+    .action((shell: string) => {
+      try {
+        printCompletionScript(shell);
+      } catch (error) {
+        process.stderr.write(formatErrorEnvelope(toEnvelope(error)));
+        process.exitCode = error instanceof CliError ? error.exitCode : EXIT_CODES.GENERIC_ERROR;
+      }
     });
 
   // ── Plugin management ──────────────────────────────────────────────────────

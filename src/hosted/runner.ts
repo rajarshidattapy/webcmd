@@ -131,7 +131,13 @@ async function dispatchHosted(
       await writeToStream(stdout, parsed.output);
       return;
     }
-    await writeToStream(stdout, requireCompletionScriptFast(parsed.shell));
+    let script: string;
+    try {
+      script = requireCompletionScriptFast(parsed.shell);
+    } catch (error) {
+      throw new CommanderCompatibleError(formatErrorEnvelope(toEnvelope(error)), errorExitCode(error));
+    }
+    await writeToStream(stdout, script);
     return;
   }
   if (args[0] === 'daemon') {
@@ -197,7 +203,7 @@ async function dispatchHosted(
 
   const command = findHostedCommand(manifest, site, commandName);
   if (!command) {
-    if (!normalized.literal && args.slice(1).some(token => token === '--help' || token === '-h')) {
+    if (!normalized.literal && hasTerminalBeforeSeparator(args.slice(1), token => token === '--help' || token === '-h')) {
       const data = hostedSiteHelpData(manifest, site);
       if (!data) {
         throw new CommanderCompatibleError(
@@ -593,6 +599,7 @@ function parseUnknownSiteRootOptions(
   let help = false;
   for (let i = 1; i < argv.length; i += 1) {
     const token = argv[i]!;
+    if (token === '--') break;
     if (token === '--profile') {
       const value = argv[i + 1];
       if (value === undefined) {
@@ -612,6 +619,17 @@ function parseUnknownSiteRootOptions(
     if (token === '--help' || token === '-h') help = true;
   }
   return { help, version: false, ...(profile !== undefined ? { profile } : {}) };
+}
+
+function hasTerminalBeforeSeparator(
+  argv: readonly string[],
+  predicate: (token: string) => boolean,
+): boolean {
+  for (const token of argv) {
+    if (token === '--') return false;
+    if (predicate(token)) return true;
+  }
+  return false;
 }
 
 function hostedCompletions(manifest: HostedManifest, argv: string[]): string[] {

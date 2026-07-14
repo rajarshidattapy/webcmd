@@ -73,6 +73,7 @@ async function runActualLocalRoot(argv: string[]): Promise<LocalRootResult> {
   const previousExitCode = process.exitCode;
   const previousArgv = process.argv;
   const previousStdoutWrite = process.stdout.write;
+  const previousStderrWrite = process.stderr.write;
   const previousConsoleError = console.error;
   process.exitCode = undefined;
   process.argv = ['node', 'webcmd', ...argv];
@@ -82,6 +83,12 @@ async function runActualLocalRoot(argv: string[]): Promise<LocalRootResult> {
     if (typeof done === 'function') done();
     return true;
   }) as typeof process.stdout.write;
+  process.stderr.write = ((chunk: string | Uint8Array, encodingOrCallback?: unknown, callback?: unknown) => {
+    stderr += String(chunk);
+    const done = typeof encodingOrCallback === 'function' ? encodingOrCallback : callback;
+    if (typeof done === 'function') done();
+    return true;
+  }) as typeof process.stderr.write;
   console.error = (...values: unknown[]) => { stderr += `${values.map(String).join(' ')}\n`; };
   const program = createProgram('', '');
   const configureTree = (command: Command): void => {
@@ -113,6 +120,7 @@ async function runActualLocalRoot(argv: string[]): Promise<LocalRootResult> {
     process.exitCode = previousExitCode;
     process.argv = previousArgv;
     process.stdout.write = previousStdoutWrite;
+    process.stderr.write = previousStderrWrite;
     console.error = previousConsoleError;
   }
 }
@@ -582,17 +590,12 @@ describe('hosted root preflight call order', () => {
       fetchImpl,
     });
 
-    expect(local).toMatchObject({
-      exitCode: 1,
-      stdout: '',
-      stderr: '',
-      errorCode: 'UNSUPPORTED_SHELL',
-      errorMessage: `Unsupported shell: ${shell}. Supported: bash, zsh, fish`,
-    });
+    expect(local).toMatchObject({ exitCode: 1, stdout: '' });
+    expect(local.stderr).toContain('code: UNSUPPORTED_SHELL');
+    expect(local.stderr).toContain(`message: 'Unsupported shell: ${shell}. Supported: bash, zsh, fish'`);
     expect(hosted).toEqual({ handled: true, exitCode: local.exitCode });
-    expect(stdout.text()).toBe('');
-    expect(stderr.text()).toContain('code: UNSUPPORTED_SHELL');
-    expect(stderr.text()).toContain(`message: 'Unsupported shell: ${shell}. Supported: bash, zsh, fish'`);
+    expect(stdout.text()).toBe(local.stdout);
+    expect(stderr.text()).toBe(local.stderr);
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 
@@ -655,6 +658,56 @@ describe('hosted root preflight call order', () => {
       expect(local.stdout).not.toBe('');
       expect(local.stderr).toBe("error: unknown command 'missing'\n");
     }
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(String(fetchImpl.mock.calls[0]![0])).toBe('https://api.example.com/v1/manifest');
+  });
+
+  it.each([
+    { name: 'long help', argv: ['github', 'bogus', '--', '--help'] },
+    { name: 'short help', argv: ['github', 'bogus', '--', '-h'] },
+  ])('stops known-site terminal scanning at command-local separator: $name', async ({ argv }) => {
+    const local = await runActualLocalKnownSite(argv);
+    const stdout = sink();
+    const stderr = sink();
+    const fetchImpl = vi.fn<typeof fetch>(async () => manifestResponse());
+
+    const hosted = await runHostedCli(argv, {
+      config: makeHostedConfig({ apiBaseUrl: 'https://api.example.com', apiKey: 'key' }),
+      stdout: stdout.stream,
+      stderr: stderr.stream,
+      fetchImpl,
+    });
+
+    expect(local).toMatchObject({ exitCode: 1, stdout: '', stderr: "error: unknown command 'bogus'\n" });
+    expect(hosted).toEqual({ handled: true, exitCode: local.exitCode });
+    expect(stdout.text()).toBe(local.stdout);
+    expect(stderr.text()).toBe(local.stderr);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(String(fetchImpl.mock.calls[0]![0])).toBe('https://api.example.com/v1/manifest');
+  });
+
+  it.each([
+    { name: 'version', argv: ['missing', '--', '--version'] },
+    { name: 'long help', argv: ['missing', '--', '--help'] },
+    { name: 'short help', argv: ['missing', '--', '-h'] },
+  ])('stops unknown-site terminal scanning at command-local separator: $name', async ({ argv }) => {
+    const local = await runActualLocalRoot(argv);
+    const stdout = sink();
+    const stderr = sink();
+    const fetchImpl = vi.fn<typeof fetch>(async () => manifestResponse());
+
+    const hosted = await runHostedCli(argv, {
+      config: makeHostedConfig({ apiBaseUrl: 'https://api.example.com', apiKey: 'key' }),
+      stdout: stdout.stream,
+      stderr: stderr.stream,
+      fetchImpl,
+    });
+
+    expect(local).toMatchObject({ exitCode: 2, stderr: "error: unknown command 'missing'\n" });
+    expect(local.stdout).not.toBe('');
+    expect(hosted).toEqual({ handled: true, exitCode: local.exitCode });
+    expect(stdout.text()).toBe(formatRootHelp(HOSTED_ROOT_HELP));
+    expect(stderr.text()).toBe(local.stderr);
     expect(fetchImpl).toHaveBeenCalledTimes(1);
     expect(String(fetchImpl.mock.calls[0]![0])).toBe('https://api.example.com/v1/manifest');
   });
