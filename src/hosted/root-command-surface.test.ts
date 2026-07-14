@@ -334,4 +334,113 @@ describe('hosted root preflight call order', () => {
     ]);
     expect(calls[1]?.body?.profile).toBe('work');
   });
+
+  it.each([
+    { argv: ['missing', '--version'], label: 'long version' },
+    { argv: ['missing', '-V'], label: 'short version' },
+  ])('matches local trailing $label handling for an unknown site', async ({ argv }) => {
+    const local = await runActualLocalRoot(argv);
+    const stdout = sink();
+    const stderr = sink();
+    const fetchImpl = vi.fn<typeof fetch>(async () => manifestResponse());
+
+    const hosted = await runHostedCli(argv, {
+      config: makeHostedConfig({ apiBaseUrl: 'https://api.example.com', apiKey: 'key' }),
+      stdout: stdout.stream,
+      stderr: stderr.stream,
+      fetchImpl,
+    });
+
+    expect(local).toMatchObject({ exitCode: 0, stdout: `${PKG_VERSION}\n`, stderr: '' });
+    expect(hosted).toEqual({ handled: true, exitCode: 0 });
+    expect(stdout.text()).toBe(local.stdout);
+    expect(stderr.text()).toBe(local.stderr);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it('preserves the literal separator for an unknown site help-shaped token', async () => {
+    const stdout = sink();
+    const stderr = sink();
+
+    const result = await runHostedCli(['--', 'missing', '--help'], {
+      config: makeHostedConfig({ apiBaseUrl: 'https://api.example.com', apiKey: 'key' }),
+      stdout: stdout.stream,
+      stderr: stderr.stream,
+      fetchImpl: async () => manifestResponse(),
+    });
+
+    expect(result).toEqual({ handled: true, exitCode: 2 });
+    expect(stderr.text()).toBe("error: unknown command 'missing'\n");
+    expect(stdout.text()).toBe(formatRootHelp(HOSTED_ROOT_HELP));
+  });
+
+  it('preserves the literal separator when list receives a help-shaped excess argument', async () => {
+    const local = await runActualLocalRoot(['--', 'list', '--help']);
+    const stdout = sink();
+    const stderr = sink();
+
+    const hosted = await runHostedCli(['--', 'list', '--help'], {
+      config: makeHostedConfig({ apiBaseUrl: 'https://api.example.com', apiKey: 'key' }),
+      stdout: stdout.stream,
+      stderr: stderr.stream,
+      fetchImpl: async () => manifestResponse(),
+    });
+
+    expect(local).toMatchObject({
+      exitCode: 1,
+      stdout: '',
+      stderr: "error: too many arguments for 'list'. Expected 0 arguments but got 1.\n",
+      errorCode: 'commander.excessArguments',
+    });
+    expect(hosted).toEqual({ handled: true, exitCode: local.exitCode });
+    expect(stdout.text()).toBe(local.stdout);
+    expect(stderr.text()).toBe(local.stderr);
+  });
+
+  it.each([
+    { name: 'help', argv: ['list', '--help'] },
+    { name: 'unknown option', argv: ['list', '--unknown'] },
+    { name: 'missing format', argv: ['list', '--format'] },
+    { name: 'excess argument', argv: ['list', 'extra'] },
+  ])('matches local list structural grammar: $name', async ({ argv }) => {
+    const local = await runActualLocalRoot(argv);
+    const stdout = sink();
+    const stderr = sink();
+
+    const hosted = await runHostedCli(argv, {
+      config: makeHostedConfig({ apiBaseUrl: 'https://api.example.com', apiKey: 'key' }),
+      stdout: stdout.stream,
+      stderr: stderr.stream,
+      fetchImpl: async () => manifestResponse(),
+    });
+
+    expect(hosted).toEqual({ handled: true, exitCode: local.exitCode });
+    expect(stdout.text()).toBe(local.stdout);
+    expect(stderr.text()).toBe(local.stderr);
+  });
+
+  it('matches the local missing completion shell error before Cloud discovery', async () => {
+    const local = await runActualLocalRoot(['completion']);
+    const stdout = sink();
+    const stderr = sink();
+    const fetchImpl = vi.fn<typeof fetch>();
+
+    const hosted = await runHostedCli(['completion'], {
+      config: makeHostedConfig({ apiBaseUrl: 'https://api.example.com', apiKey: 'key' }),
+      stdout: stdout.stream,
+      stderr: stderr.stream,
+      fetchImpl,
+    });
+
+    expect(local).toMatchObject({
+      exitCode: 1,
+      stdout: '',
+      stderr: "error: missing required argument 'shell'\n",
+      errorCode: 'commander.missingArgument',
+    });
+    expect(hosted).toEqual({ handled: true, exitCode: local.exitCode });
+    expect(stdout.text()).toBe(local.stdout);
+    expect(stderr.text()).toBe(local.stderr);
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
 });

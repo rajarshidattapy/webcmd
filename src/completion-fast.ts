@@ -55,14 +55,9 @@ const SHELL_SCRIPTS: Record<string, () => string> = {
   fish: fishCompletionScript,
 };
 
-/**
- * Print completion script for the given shell. Returns true if handled, false if unknown shell.
- */
-export function printCompletionScriptFast(shell: string): boolean {
-  const gen = SHELL_SCRIPTS[shell];
-  if (!gen) return false;
-  process.stdout.write(gen());
-  return true;
+/** Return a generated shell script without taking ownership of stdout. */
+export function getCompletionScriptFast(shell: string): string | undefined {
+  return SHELL_SCRIPTS[shell]?.();
 }
 
 function loadManifestEntries(manifestPaths: string[]): ManifestCompletionEntry[] | null {

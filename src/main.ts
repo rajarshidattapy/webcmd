@@ -17,12 +17,13 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { getCompletionsFromManifest, hasAllManifests, printCompletionScriptFast } from './completion-fast.js';
+import { getCompletionScriptFast, getCompletionsFromManifest, hasAllManifests } from './completion-fast.js';
 import { findPackageRoot, getCliManifestPath } from './package-paths.js';
 import { PKG_VERSION } from './version.js';
 import { EXIT_CODES } from './errors.js';
 import { isSupportedNodeVersion, MIN_SUPPORTED_NODE_MAJOR } from './runtime-detect.js';
 import { CONFIG_DIR_NAME } from './brand.js';
+import { writeToStream } from './stream-write.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -49,15 +50,20 @@ if (typeof (globalThis as { Bun?: unknown }).Bun === 'undefined' && !isSupported
 
 // Fast path: --version (only when it's the top-level intent, not passed to a subcommand)
 // e.g. `webcmd --version` or `webcmd -V`, but NOT `webcmd gh --version`
+let fastPathHandled = false;
 if (argv[0] === '--version' || argv[0] === '-V') {
-  process.stdout.write(PKG_VERSION + '\n');
-  process.exit(EXIT_CODES.SUCCESS);
+  await writeToStream(process.stdout, PKG_VERSION + '\n');
+  process.exitCode = EXIT_CODES.SUCCESS;
+  fastPathHandled = true;
 }
 
 // Fast path: completion <shell> — print shell script without discovery
-if (argv[0] === 'completion' && argv.length >= 2) {
-  if (printCompletionScriptFast(argv[1])) {
-    process.exit(EXIT_CODES.SUCCESS);
+if (!fastPathHandled && argv[0] === 'completion' && argv.length >= 2) {
+  const script = getCompletionScriptFast(argv[1]!);
+  if (script !== undefined) {
+    await writeToStream(process.stdout, script);
+    process.exitCode = EXIT_CODES.SUCCESS;
+    fastPathHandled = true;
   }
   // Unknown shell — fall through to full path for proper error handling
 }
@@ -66,17 +72,19 @@ if (argv[0] === 'completion' && argv.length >= 2) {
 // the mode boundary: hosted mode must not read ~/.webcmd/clis or local site
 // memory just to decide what commands exist. Awaiting the selected branch and
 // assigning exitCode lets Node flush pending stdout/stderr before shutdown.
-if (argv[0] === 'setup') {
-  const { runHostedSetup } = await import('./hosted/setup.js');
-  process.exitCode = await runHostedSetup();
-} else {
-  const { shouldUseHostedMode } = await import('./hosted/config.js');
-  if (shouldUseHostedMode()) {
-    const { runHostedCli } = await import('./hosted/runner.js');
-    const result = await runHostedCli(argv);
-    process.exitCode = result.exitCode;
+if (!fastPathHandled) {
+  if (argv[0] === 'setup') {
+    const { runHostedSetup } = await import('./hosted/setup.js');
+    process.exitCode = await runHostedSetup();
   } else {
-    await runLocalMain();
+    const { shouldUseHostedMode } = await import('./hosted/config.js');
+    if (shouldUseHostedMode()) {
+      const { runHostedCli } = await import('./hosted/runner.js');
+      const result = await runHostedCli(argv);
+      process.exitCode = result.exitCode;
+    } else {
+      await runLocalMain();
+    }
   }
 }
 
@@ -103,8 +111,9 @@ if (getCompIdx !== -1) {
     }
     if (cursor === undefined) cursor = words.length;
     const candidates = getCompletionsFromManifest(words, cursor, manifestPaths);
-    process.stdout.write(candidates.join('\n') + '\n');
-    process.exit(EXIT_CODES.SUCCESS);
+    await writeToStream(process.stdout, candidates.join('\n') + '\n');
+    process.exitCode = EXIT_CODES.SUCCESS;
+    return;
   }
   // No manifest — fall through to full discovery path below
 }
@@ -161,8 +170,9 @@ if (getCompIdx !== -1) {
   }
   if (cursor === undefined) cursor = words.length;
   const candidates = getCompletions(words, cursor);
-  process.stdout.write(candidates.join('\n') + '\n');
-  process.exit(EXIT_CODES.SUCCESS);
+  await writeToStream(process.stdout, candidates.join('\n') + '\n');
+  process.exitCode = EXIT_CODES.SUCCESS;
+  return;
 }
 
 // Rewrite `webcmd browser <session> <subcommand> ...` so commander (which

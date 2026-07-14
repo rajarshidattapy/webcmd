@@ -6,6 +6,8 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
+import { bashCompletionScript } from '../completion-shared.js';
+import { PKG_VERSION } from '../version.js';
 
 const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const entrypoint = path.join(packageRoot, 'src/main.ts');
@@ -35,6 +37,21 @@ afterEach(async () => {
 });
 
 describe('hosted CLI process lifecycle', () => {
+  it.each([
+    { name: 'version', argv: ['--version'], expected: `${PKG_VERSION}\n` },
+    { name: 'shell completion', argv: ['completion', 'bash'], expected: bashCompletionScript() },
+  ])('awaits a backpressured $name fast-path write before exiting', async ({ argv, expected }) => {
+    const fixture = await createHostedFixture('success');
+    const preload = await createDelayedStdoutPreload(path.dirname(fixture.discoverySentinel));
+
+    const result = await runCli(argv, fixture.env, [preload]);
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toBe(expected);
+    expect(result.stderr).toBe('');
+    await expect(readFile(fixture.discoverySentinel, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
+  }, 20_000);
+
   it('flushes delayed output and trace bytes, returns success, and never enters local discovery', async () => {
     const fixture = await createHostedFixture('success');
 
@@ -171,13 +188,14 @@ function sendChunkedJson(response: import('node:http').ServerResponse, value: un
   setTimeout(() => response.end(body.slice(split)), 25);
 }
 
-function runCli(args: string[], env: NodeJS.ProcessEnv): Promise<{
+function runCli(args: string[], env: NodeJS.ProcessEnv, imports: string[] = []): Promise<{
   status: number | null;
   stdout: string;
   stderr: string;
 }> {
   return new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, ['--import', 'tsx', entrypoint, ...args], {
+    const importArgs = imports.flatMap(specifier => ['--import', specifier]);
+    const child = spawn(process.execPath, [...importArgs, '--import', 'tsx', entrypoint, ...args], {
       cwd: packageRoot,
       env,
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -193,4 +211,24 @@ function runCli(args: string[], env: NodeJS.ProcessEnv): Promise<{
       stderr: Buffer.concat(stderr).toString('utf8'),
     }));
   });
+}
+
+async function createDelayedStdoutPreload(root: string): Promise<string> {
+  const preload = path.join(root, 'delay-stdout.mjs');
+  await writeFile(preload, [
+    'const originalWrite = process.stdout.write.bind(process.stdout);',
+    'process.stdout.write = function delayedWrite(chunk, encoding, callback) {',
+    "  const actualEncoding = typeof encoding === 'string' ? encoding : undefined;",
+    "  const done = typeof encoding === 'function' ? encoding : callback;",
+    '  setTimeout(() => {',
+    '    originalWrite(chunk, actualEncoding, (error) => {',
+    '      done?.(error);',
+    "      process.stdout.emit('drain');",
+    '    });',
+    '  }, 75);',
+    '  return false;',
+    '};',
+    '',
+  ].join('\n'));
+  return preload;
 }

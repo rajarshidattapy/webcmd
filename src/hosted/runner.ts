@@ -1,6 +1,8 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { Command, CommanderError } from 'commander';
+import { configureListCommandSurface } from '../builtin-command-surface.js';
 import { BrowserSessionArgvError, rewriteBrowserArgv } from '../cli-argv-preprocess.js';
 import { CommanderStructuralError, MissingRequiredPositionalError } from '../command-surface.js';
 import { formatRootHelp, getCommandCompletionCandidates } from '../command-presentation.js';
@@ -14,6 +16,7 @@ import { getRequestedHelpFormat, renderStructuredHelp } from '../help.js';
 import { findPackageRoot } from '../package-paths.js';
 import { formatErrorEnvelope, render as renderOutput } from '../output.js';
 import { StreamWriteError, writeToStream } from '../stream-write.js';
+import { PKG_VERSION } from '../version.js';
 import { HostedClient, HostedClientError } from './client.js';
 import { parseHostedInvocation } from './args.js';
 import { HostedBrowserHelp, parseHostedBrowserStructure } from './browser-args.js';
@@ -121,6 +124,9 @@ async function dispatchHosted(
     return;
   }
   const args = normalized.argv;
+  if (args[0] === 'completion' && args.length === 1) {
+    throw new CommanderStructuralError("error: missing required argument 'shell'\n", EXIT_CODES.GENERIC_ERROR);
+  }
   if (args[0] === 'daemon') {
     throw new ConfigError(
       'webcmd daemon is local-only. Hosted mode has no local daemon.',
@@ -135,18 +141,30 @@ async function dispatchHosted(
     return;
   }
 
-  const manifest = await client.getManifest();
-  validateManifestContractIdentity(manifest);
   if (args[0] === 'list') {
-    await renderHostedList(manifest, args.slice(1), stdout);
+    const parsed = parseHostedListSurface(args.slice(1), normalized.literal);
+    if (parsed.kind === 'help') {
+      await writeToStream(stdout, parsed.output);
+      return;
+    }
+    const manifest = await client.getManifest();
+    validateManifestContractIdentity(manifest);
+    await renderHostedList(manifest, parsed.format, parsed.formatExplicit, stdout);
     return;
   }
+
+  const manifest = await client.getManifest();
+  validateManifestContractIdentity(manifest);
 
   const site = args[0]!;
   const commandName = args[1];
   const siteExists = manifest.commands.some(command => command.site === site);
   if (!siteExists) {
-    const unknownRoot = parseUnknownSiteRootOptions(args);
+    const unknownRoot = parseUnknownSiteRootOptions(args, normalized.literal);
+    if (unknownRoot.version) {
+      await writeToStream(stdout, `${PKG_VERSION}\n`);
+      return;
+    }
     if (unknownRoot.help) {
       await writeToStream(stdout, formatRootHelp(HOSTED_ROOT_HELP));
       return;
@@ -451,10 +469,10 @@ async function renderHostedBrowserResponse(
 
 async function renderHostedList(
   manifest: HostedManifest,
-  argv: string[],
+  fmt: string,
+  explicit: boolean,
   stdout: NodeJS.WritableStream,
 ): Promise<void> {
-  const { format: fmt, explicit } = readFormat(argv);
   const presentation = hostedListPresentation(manifest, fmt);
   if (presentation.displayLines) {
     for (const line of presentation.displayLines) await writeToStream(stdout, `${line}\n`);
@@ -478,16 +496,48 @@ async function writeHostedHelp(
   await writeToStream(stdout, format ? renderStructuredHelp(data, format) : text);
 }
 
-function readFormat(argv: string[]): { format: string; explicit: boolean } {
-  for (let i = 0; i < argv.length; i++) {
-    if (argv[i] === '-f' || argv[i] === '--format') return { format: argv[i + 1] ?? 'table', explicit: true };
-    if (argv[i]?.startsWith('--format=')) return { format: argv[i]!.slice('--format='.length), explicit: true };
+type ParsedHostedListSurface =
+  | { kind: 'help'; output: string }
+  | { kind: 'run'; format: string; formatExplicit: boolean };
+
+function parseHostedListSurface(argv: readonly string[], literal: boolean): ParsedHostedListSurface {
+  let stdout = '';
+  let stderr = '';
+  let parsedFormat = 'table';
+  let formatExplicit = false;
+  let actionRan = false;
+  const root = new Command('webcmd');
+  const list = configureListCommandSurface(root.command('list'));
+  const output = {
+    writeOut: (value: string) => { stdout += value; },
+    writeErr: (value: string) => { stderr += value; },
+  };
+  root.exitOverride().configureOutput(output);
+  list.exitOverride().configureOutput(output).action((options: { format: string }) => {
+    actionRan = true;
+    parsedFormat = options.format;
+    formatExplicit = list.getOptionValueSource('format') === 'cli';
+  });
+
+  try {
+    root.parse(literal ? ['--', 'list', ...argv] : ['list', ...argv], { from: 'user' });
+  } catch (error) {
+    if (!(error instanceof CommanderError)) throw error;
+    if (error.code === 'commander.helpDisplayed') return { kind: 'help', output: stdout };
+    throw new CommanderStructuralError(stderr || `${error.message}\n`, error.exitCode);
   }
-  return { format: 'table', explicit: false };
+  if (!actionRan) throw new CommanderStructuralError("error: command 'list' did not run\n", 1);
+  return { kind: 'run', format: parsedFormat, formatExplicit };
 }
 
-function parseUnknownSiteRootOptions(argv: readonly string[]): { help: boolean; profile?: string } {
+function parseUnknownSiteRootOptions(
+  argv: readonly string[],
+  literal: boolean,
+): { help: boolean; version: boolean; profile?: string } {
+  if (literal) return { help: false, version: false };
   let profile: string | undefined;
+  let help = false;
+  let version = false;
   for (let i = 1; i < argv.length; i += 1) {
     const token = argv[i]!;
     if (token === '--profile') {
@@ -503,9 +553,10 @@ function parseUnknownSiteRootOptions(argv: readonly string[]): { help: boolean; 
       profile = token.slice('--profile='.length);
       continue;
     }
-    if (token === '--help' || token === '-h') return { help: true, ...(profile !== undefined ? { profile } : {}) };
+    if (token === '--version' || token.startsWith('-V')) version = true;
+    if (token === '--help' || token === '-h') help = true;
   }
-  return { help: false, ...(profile !== undefined ? { profile } : {}) };
+  return { help, version, ...(profile !== undefined ? { profile } : {}) };
 }
 
 function hostedCompletions(manifest: HostedManifest, argv: string[]): string[] {

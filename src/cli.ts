@@ -14,6 +14,7 @@ import { Command, Option } from 'commander';
 import { findPackageRoot, getBuiltEntryCandidates } from './package-paths.js';
 import { type CliCommand, getRegistry } from './registry.js';
 import { commandListPresentation, toPresentableCommand } from './command-presentation.js';
+import { configureCompletionCommandSurface, configureListCommandSurface } from './builtin-command-surface.js';
 import { render as renderOutput } from './output.js';
 import { PKG_VERSION } from './version.js';
 import { printCompletionScript } from './completion.js';
@@ -774,10 +775,7 @@ export function createProgram(BUILTIN_CLIS: string, USER_CLIS: string): Command 
 
   // ── Built-in: list ────────────────────────────────────────────────────────
 
-  program
-    .command('list')
-    .description('List all available CLI commands')
-    .option('-f, --format <fmt>', 'Output format: table, json, yaml, md, csv', 'table')
+  configureListCommandSurface(program.command('list'))
     .action((opts) => {
       const externalClis = opts.format === 'table' ? loadExternalClis() : [];
       const presentation = commandListPresentation(
@@ -3027,10 +3025,7 @@ cli({
       console.log(renderBrowserDoctorReport(report));
     });
 
-  program
-    .command('completion')
-    .description('Output shell completion script')
-    .argument('<shell>', 'Shell type: bash, zsh, or fish')
+  configureCompletionCommandSurface(program.command('completion'))
     .action((shell) => {
       printCompletionScript(shell);
     });
