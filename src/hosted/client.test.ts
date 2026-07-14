@@ -664,6 +664,21 @@ describe('HostedClient', () => {
       method: 'finishBrowserRun' as const,
       body: { ok: true, execution: { id: 'exec_other', status: 'succeeded' } },
     },
+    {
+      method: 'runBrowserAction' as const,
+      body: { ok: true, result: {}, columns: [], trace: null },
+    },
+    {
+      method: 'runBrowserAction' as const,
+      body: {
+        ok: true,
+        result: {},
+        columns: [],
+        trace: null,
+        run: { executionId: 'exec_1', session: 'other', profile: { id: 'profile_default', displayName: 'default' } },
+        execution: { id: 'exec_1', status: 'succeeded' },
+      },
+    },
   ])('rejects malformed browser success from $method', async ({ method, body }) => {
     const client = new HostedClient({
       apiBaseUrl: 'https://api.example.com',
@@ -674,12 +689,14 @@ describe('HostedClient', () => {
       ? client.startBrowserRun('work', { command: 'browser/open', args: {} })
       : method === 'browserAction'
         ? client.browserAction('work', 'exec_1', { action: 'navigate', args: {} })
-        : client.finishBrowserRun('work', 'exec_1', { status: 'succeeded' });
+        : method === 'finishBrowserRun'
+          ? client.finishBrowserRun('work', 'exec_1', { status: 'succeeded' })
+          : client.runBrowserAction('work', { command: 'browser/open', action: 'navigate', args: {} });
 
     await expect(request).rejects.toMatchObject({ code: 'HOSTED_PROTOCOL' });
   });
 
-  it('runs hosted browser lifecycle calls and finishes the execution', async () => {
+  it('runs a hosted browser action through the atomic action endpoint', async () => {
     const requests: Array<{ url: string; body?: unknown }> = [];
     const client = new HostedClient({
       apiBaseUrl: 'https://api.example.com',
@@ -689,28 +706,21 @@ describe('HostedClient', () => {
           url: String(url),
           body: init?.body ? JSON.parse(String(init.body)) as unknown : undefined,
         });
-        if (String(url).endsWith('/runs')) {
-          return new Response(JSON.stringify({
-            ok: true,
-            run: {
-              executionId: 'exec_1',
-              session: 'work',
-              profile: { id: 'profile_default', displayName: 'default' },
-            },
-          }), { status: 201 });
-        }
-        if (String(url).endsWith('/actions')) {
+        if (String(url).endsWith('/commands')) {
           return new Response(JSON.stringify({
             ok: true,
             result: { url: 'https://example.com' },
             columns: ['url'],
             trace: null,
+            run: {
+              executionId: 'exec_1',
+              session: 'work',
+              profile: { id: 'profile_default', displayName: 'default' },
+            },
+            execution: { id: 'exec_1', status: 'succeeded' },
           }), { status: 200 });
         }
-        return new Response(JSON.stringify({
-          ok: true,
-          execution: { id: 'exec_1', status: 'succeeded' },
-        }), { status: 200 });
+        return new Response(JSON.stringify({ ok: false, error: { code: 'UNEXPECTED', message: String(url), exitCode: 1 } }), { status: 500 });
       },
     });
 
@@ -726,27 +736,13 @@ describe('HostedClient', () => {
     });
     expect(requests).toEqual([
       {
-        url: 'https://api.example.com/v1/browser/work/runs',
+        url: 'https://api.example.com/v1/browser/work/commands',
         body: {
           command: 'browser/open',
-          args: { url: 'https://example.com' },
-          profile: 'default',
-          windowMode: 'background',
-        },
-      },
-      {
-        url: 'https://api.example.com/v1/browser/work/runs/exec_1/actions',
-        body: {
           action: 'navigate',
           args: { url: 'https://example.com' },
           profile: 'default',
-        },
-      },
-      {
-        url: 'https://api.example.com/v1/browser/work/runs/exec_1/finish',
-        body: {
-          status: 'succeeded',
-          profile: 'default',
+          windowMode: 'background',
         },
       },
     ]);

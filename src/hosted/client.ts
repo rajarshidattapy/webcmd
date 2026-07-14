@@ -215,37 +215,18 @@ export class HostedClient {
   }
 
   async runBrowserAction(session: string, input: HostedBrowserRunActionInput): Promise<HostedBrowserRunActionResponse> {
-    const { command, trace, windowMode, action, profile, args } = input;
-    const run = await this.startBrowserRun(session, {
-      command,
-      args,
-      ...(profile !== undefined ? { profile } : {}),
-      ...(windowMode !== undefined ? { windowMode } : {}),
-      ...(trace !== undefined ? { trace } : {}),
+    return this.executeBrowserCommand(session, input);
+  }
+
+  async executeBrowserCommand(session: string, input: HostedBrowserRunActionInput): Promise<HostedBrowserRunActionResponse> {
+    const body = await this.request(`/v1/browser/${encodeURIComponent(session)}/commands`, {
+      method: 'POST',
+      body: JSON.stringify(input),
     });
-    try {
-      const actionResponse = await this.browserAction(session, run.run.executionId, {
-        action,
-        args,
-        ...(profile !== undefined ? { profile } : {}),
-      });
-      const finished = await this.finishBrowserRun(session, run.run.executionId, {
-        status: 'succeeded',
-        ...(profile !== undefined ? { profile } : {}),
-      });
-      return {
-        ...actionResponse,
-        run: run.run,
-        execution: finished.execution,
-      };
-    } catch (error) {
-      await this.finishBrowserRun(session, run.run.executionId, {
-        status: 'failed',
-        errorCode: error instanceof HostedClientError ? error.code : 'HOSTED_BROWSER_ACTION_FAILED',
-        ...(profile !== undefined ? { profile } : {}),
-      }).catch(() => undefined);
-      throw error;
+    if (!isHostedBrowserRunActionResponse(body, session)) {
+      throw protocolError('Webcmd Cloud returned an invalid browser action response.');
     }
+    return body;
   }
 
   private async request(
@@ -463,8 +444,11 @@ function isSafeRelativeArtifactPath(value: unknown): value is string {
 }
 
 function isHostedBrowserRunResponse(value: unknown, requestedSession: string): value is HostedBrowserRunResponse {
-  if (!hasExactKeys(value, ['ok', 'run']) || value.ok !== true) return false;
-  const run = value.run;
+  return hasExactKeys(value, ['ok', 'run']) && value.ok === true && isHostedBrowserRunPayload(value.run, requestedSession);
+}
+
+function isHostedBrowserRunPayload(value: unknown, requestedSession: string): value is HostedBrowserRunResponse['run'] {
+  const run = value;
   if (!hasOnlyKeys(run, ['executionId', 'session', 'profile', 'liveViewUrl'])) return false;
   if (typeof run.executionId !== 'string' || run.session !== requestedSession) return false;
   if (!hasExactKeys(run.profile, ['id', 'displayName'])) return false;
@@ -476,6 +460,17 @@ function isHostedBrowserActionResponse(value: unknown): value is HostedBrowserAc
   if (!hasExactKeys(value, ['ok', 'result', 'columns', 'trace']) || value.ok !== true) return false;
   if (!Array.isArray(value.columns) || !value.columns.every(column => typeof column === 'string')) return false;
   return value.trace === null || isHostedBrowserActionTrace(value.trace);
+}
+
+function isHostedBrowserRunActionResponse(value: unknown, requestedSession: string): value is HostedBrowserRunActionResponse {
+  if (!hasExactKeys(value, ['ok', 'result', 'columns', 'trace', 'run', 'execution']) || value.ok !== true) return false;
+  if (!Array.isArray(value.columns) || !value.columns.every(column => typeof column === 'string')) return false;
+  if (value.trace !== null && !isHostedBrowserActionTrace(value.trace)) return false;
+  if (!isHostedBrowserRunPayload(value.run, requestedSession)) return false;
+  return hasExactKeys(value.execution, ['id', 'status'])
+    && typeof value.execution.id === 'string'
+    && value.execution.id === value.run.executionId
+    && (value.execution.status === 'succeeded' || value.execution.status === 'failed' || value.execution.status === 'timed_out');
 }
 
 function isHostedBrowserActionTrace(value: unknown): boolean {

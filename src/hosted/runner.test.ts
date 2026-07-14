@@ -1289,7 +1289,7 @@ describe('runHostedCli', () => {
     }
   });
 
-  it('dispatches every catalogued hosted browser command except bind to the cloud action endpoint', async () => {
+  it('dispatches every catalogued hosted browser command except bind to the cloud command endpoint', async () => {
     for (const contract of browserCommandCatalog.filter(command => command.command !== 'bind')) {
       const requests: Array<{ pathname: string; body?: Record<string, unknown> }> = [];
       const result = await runHostedCli(['browser', 'work', ...contract.command.split('/'), ...sampleBrowserPositionals(contract)], {
@@ -1301,22 +1301,17 @@ describe('runHostedCli', () => {
           const body = init?.body ? JSON.parse(String(init.body)) as Record<string, unknown> : undefined;
           requests.push({ pathname: parsedUrl.pathname, ...(body ? { body } : {}) });
           if (parsedUrl.pathname === '/v1/manifest') return manifestResponse();
-          if (parsedUrl.pathname === '/v1/browser/work/runs') {
+          if (parsedUrl.pathname === '/v1/browser/work/commands') {
             return new Response(JSON.stringify({
               ok: true,
+              result: {},
+              columns: [],
+              trace: null,
               run: {
                 executionId: `exec_${contract.command.replaceAll('/', '_')}`,
                 session: 'work',
                 profile: { id: 'profile_default', displayName: 'default' },
               },
-            }), { status: 201 });
-          }
-          if (parsedUrl.pathname.endsWith('/actions')) {
-            return new Response(JSON.stringify({ ok: true, result: {}, columns: [], trace: null }), { status: 200 });
-          }
-          if (parsedUrl.pathname.endsWith('/finish')) {
-            return new Response(JSON.stringify({
-              ok: true,
               execution: { id: `exec_${contract.command.replaceAll('/', '_')}`, status: 'succeeded' },
             }), { status: 200 });
           }
@@ -1333,17 +1328,15 @@ describe('runHostedCli', () => {
       });
       expect({
         command: contract.command,
-        start: requests.find(request => request.pathname === '/v1/browser/work/runs')?.body,
-        action: requests.find(request => request.pathname.endsWith('/actions'))?.body,
+        action: requests.find(request => request.pathname === '/v1/browser/work/commands')?.body,
       }).toMatchObject({
         command: contract.command,
-        start: { command: `browser/${contract.command}` },
-        action: { action: contract.action },
+        action: { command: `browser/${contract.command}`, action: contract.action },
       });
     }
   });
 
-  it('routes hosted browser positional commands through the cloud lifecycle', async () => {
+  it('routes hosted browser positional commands through the atomic cloud action route', async () => {
     const requests: Array<{ url: string; body?: unknown }> = [];
     const stdout = sink();
     const result = await runHostedCli(['--profile', 'default', 'browser', 'work', 'open', 'https://example.com', '--window', 'background'], {
@@ -1355,28 +1348,21 @@ describe('runHostedCli', () => {
           body: init?.body ? JSON.parse(String(init.body)) as unknown : undefined,
         });
         if (String(url).endsWith('/v1/manifest')) return manifestResponse();
-        if (String(url).endsWith('/runs')) {
-          return new Response(JSON.stringify({
-            ok: true,
-            run: {
-              executionId: 'exec_browser',
-              session: 'work',
-              profile: { id: 'profile_default', displayName: 'default' },
-            },
-          }), { status: 201 });
-        }
-        if (String(url).endsWith('/actions')) {
+        if (String(url).endsWith('/commands')) {
           return new Response(JSON.stringify({
             ok: true,
             result: { url: 'https://example.com' },
             columns: ['url'],
             trace: null,
+            run: {
+              executionId: 'exec_browser',
+              session: 'work',
+              profile: { id: 'profile_default', displayName: 'default' },
+            },
+            execution: { id: 'exec_browser', status: 'succeeded' },
           }), { status: 200 });
         }
-        return new Response(JSON.stringify({
-          ok: true,
-          execution: { id: 'exec_browser', status: 'succeeded' },
-        }), { status: 200 });
+        return new Response(JSON.stringify({ ok: false, error: { code: 'UNEXPECTED', message: String(url), exitCode: 1 } }), { status: 500 });
       },
     });
 
@@ -1388,34 +1374,20 @@ describe('runHostedCli', () => {
         body: undefined,
       },
       {
-        url: 'https://api.example.com/v1/browser/work/runs',
+        url: 'https://api.example.com/v1/browser/work/commands',
         body: {
           command: 'browser/open',
+          action: 'navigate',
           args: { url: 'https://example.com' },
           profile: 'default',
           windowMode: 'background',
           trace: 'off',
         },
       },
-      {
-        url: 'https://api.example.com/v1/browser/work/runs/exec_browser/actions',
-        body: {
-          action: 'navigate',
-          args: { url: 'https://example.com' },
-          profile: 'default',
-        },
-      },
-      {
-        url: 'https://api.example.com/v1/browser/work/runs/exec_browser/finish',
-        body: {
-          status: 'succeeded',
-          profile: 'default',
-        },
-      },
     ]);
   });
 
-  it('uses the canonical Commander value for a dash-leading browser option in both Cloud requests', async () => {
+  it('uses the canonical Commander value for a dash-leading browser option in the Cloud request', async () => {
     const requests: Array<{ url: string; body?: Record<string, unknown> }> = [];
     const result = await runHostedCli(['browser', 'work', 'scroll', 'down', '--amount', '-5'], {
       config: makeHostedConfig({ apiBaseUrl: 'https://api.example.com', apiKey: 'key' }),
@@ -1425,40 +1397,30 @@ describe('runHostedCli', () => {
         const body = init?.body ? JSON.parse(String(init.body)) as Record<string, unknown> : undefined;
         requests.push({ url: String(url), ...(body ? { body } : {}) });
         if (String(url).endsWith('/v1/manifest')) return manifestResponse();
-        if (String(url).endsWith('/runs')) {
-          return new Response(JSON.stringify({
-            ok: true,
-            run: {
-              executionId: 'exec_browser_scroll',
-              session: 'work',
-              profile: { id: 'profile_default', displayName: 'default' },
-            },
-          }), { status: 201 });
-        }
-        if (String(url).endsWith('/actions')) {
+        if (String(url).endsWith('/commands')) {
           return new Response(JSON.stringify({
             ok: true,
             result: { scrolled: 'down', amount: -5 },
             columns: ['scrolled', 'amount'],
             trace: null,
+            run: {
+              executionId: 'exec_browser_scroll',
+              session: 'work',
+              profile: { id: 'profile_default', displayName: 'default' },
+            },
+            execution: { id: 'exec_browser_scroll', status: 'succeeded' },
           }), { status: 200 });
         }
-        return new Response(JSON.stringify({
-          ok: true,
-          execution: { id: 'exec_browser_scroll', status: 'succeeded' },
-        }), { status: 200 });
+        return new Response(JSON.stringify({ ok: false, error: { code: 'UNEXPECTED', message: String(url), exitCode: 1 } }), { status: 500 });
       },
     });
 
     expect(result).toEqual({ handled: true, exitCode: 0 });
     expect(requests[1]?.body).toEqual({
       command: 'browser/scroll',
-      args: { direction: 'down', amount: '-5' },
-      trace: 'off',
-    });
-    expect(requests[2]?.body).toEqual({
       action: 'scroll',
       args: { direction: 'down', amount: '-5' },
+      trace: 'off',
     });
   });
 
@@ -1565,34 +1527,32 @@ describe('runHostedCli', () => {
         const body = init?.body ? JSON.parse(String(init.body)) as Record<string, unknown> : undefined;
         requests.push({ url: String(url), ...(body ? { body } : {}) });
         if (String(url).endsWith('/v1/manifest')) return manifestResponse();
-        if (String(url).endsWith('/runs')) {
+        if (String(url).endsWith('/commands')) {
           return new Response(JSON.stringify({
             ok: true,
+            result: {},
+            columns: [],
+            trace: null,
             run: {
               executionId: 'exec_browser_canonical',
               session: 'work',
               profile: { id: 'profile_default', displayName: 'default' },
             },
-          }), { status: 201 });
+            execution: { id: 'exec_browser_canonical', status: 'succeeded' },
+          }), { status: 200 });
         }
-        if (String(url).endsWith('/actions')) {
-          return new Response(JSON.stringify({ ok: true, result: {}, columns: [], trace: null }), { status: 200 });
-        }
-        return new Response(JSON.stringify({
-          ok: true,
-          execution: { id: 'exec_browser_canonical', status: 'succeeded' },
-        }), { status: 200 });
+        return new Response(JSON.stringify({ ok: false, error: { code: 'UNEXPECTED', message: String(url), exitCode: 1 } }), { status: 500 });
       },
     });
 
     expect(result).toEqual({ handled: true, exitCode: 0 });
     expect(requests[1]?.body).toEqual({
       command,
+      action,
       args,
       ...(windowMode ? { windowMode } : {}),
       trace: 'off',
     });
-    expect(requests[2]?.body).toEqual({ action, args });
   });
 
   it('rejects a browser manifest mismatch before starting a provider run', async () => {
@@ -1631,23 +1591,10 @@ describe('runHostedCli', () => {
       fetchImpl: async (url) => {
         requests.push(String(url));
         if (String(url).endsWith('/v1/manifest')) return manifestResponse();
-        if (String(url).endsWith('/runs')) {
-          return new Response(JSON.stringify({
-            ok: true,
-            run: {
-              executionId: 'exec_browser',
-              session: 'work',
-              profile: { id: 'profile_default', displayName: 'default' },
-            },
-          }), { status: 201 });
-        }
-        if (String(url).endsWith('/actions')) {
+        if (String(url).endsWith('/commands')) {
           return new Response(JSON.stringify({ ok: true, internalPath: privatePath }), { status: 200 });
         }
-        return new Response(JSON.stringify({
-          ok: true,
-          execution: { id: 'exec_browser', status: 'failed' },
-        }), { status: 200 });
+        return new Response(JSON.stringify({ ok: false, error: { code: 'UNEXPECTED', message: String(url), exitCode: 1 } }), { status: 500 });
       },
     });
 
@@ -1658,9 +1605,7 @@ describe('runHostedCli', () => {
     expect(stderr.text()).not.toContain(privatePath);
     expect(requests).toEqual([
       'https://api.example.com/v1/manifest',
-      'https://api.example.com/v1/browser/work/runs',
-      'https://api.example.com/v1/browser/work/runs/exec_browser/actions',
-      'https://api.example.com/v1/browser/work/runs/exec_browser/finish',
+      'https://api.example.com/v1/browser/work/commands',
     ]);
   });
 
