@@ -18,6 +18,7 @@ import { formatErrorEnvelope, render as renderOutput } from '../output.js';
 import { StreamWriteError, writeToStream } from '../stream-write.js';
 import { PKG_VERSION } from '../version.js';
 import { requireCompletionScriptFast } from '../completion-fast.js';
+import { browserCommandCatalog } from '../browser/command-catalog.js';
 import { HostedClient, HostedClientError } from './client.js';
 import { parseHostedInvocation } from './args.js';
 import { HostedBrowserHelp, parseHostedBrowserStructure } from './browser-args.js';
@@ -35,6 +36,7 @@ import {
 import { isHostedConfig, loadWebcmdConfig, type WebcmdConfig } from './config.js';
 import { parseHostedRootCommandSurface } from '../root-command-surface.js';
 import type { HostedBrowserActionName, HostedBrowserRunActionResponse, HostedManifest } from './types.js';
+import type { HostedBrowserCommandContract } from './contract.js';
 
 export interface HostedRunnerOptions {
   config?: WebcmdConfig;
@@ -58,6 +60,8 @@ class CommanderCompatibleError extends Error {
     super(output.trimEnd());
   }
 }
+
+const hostedBrowserCommandsByPath = new Map(browserCommandCatalog.map(command => [command.command, command]));
 
 export async function runHostedCli(argv: string[], opts: HostedRunnerOptions = {}): Promise<HostedRunResult> {
   const config = opts.config ?? loadWebcmdConfig();
@@ -400,118 +404,136 @@ function parseBrowserLeaf(
   args: Record<string, unknown>;
   localPath?: string;
 } {
-  switch (leaf) {
-    case 'bind':
+  const contract = hostedBrowserCommandsByPath.get(leaf);
+  if (!contract || !contract.action) {
+    if (leaf === 'bind' || contract?.sessionPolicy === 'local-only') {
       throw new ConfigError(
         'Browser bind is not supported in hosted mode.',
         'Use browser state or browser tabs to inspect the active hosted page.',
       );
-    case 'unbind':
-    case 'close':
-      return { commandName: leaf, action: 'close-window', args: {} };
-    case 'open':
-      return { commandName: 'open', action: 'navigate', args: { url: requiredPositional(positionals, 0, 'url') } };
-    case 'back':
-      return { commandName: 'back', action: 'back', args: {} };
-    case 'state':
-      return { commandName: 'state', action: 'snapshot', args: { source: options.source ?? 'dom' } };
-    case 'frames':
-      return { commandName: 'frames', action: 'frames', args: {} };
-    case 'screenshot': {
-      const localPath = positionals[0];
-      return {
-        commandName: 'screenshot',
-        action: 'screenshot',
-        args: {
-          fullPage: options.fullPage === true,
-          ...(options.width !== undefined ? { width: options.width } : {}),
-          ...(options.height !== undefined ? { height: options.height } : {}),
-        },
-        ...(localPath !== undefined ? { localPath } : {}),
-      };
     }
+    throw new ConfigError(`Hosted browser command is not supported yet: ${leaf}`);
+  }
+
+  const localPath = leaf === 'screenshot' ? positionals[0] : undefined;
+  const args = browserActionArgs(contract, positionals, options);
+  return {
+    commandName: leaf,
+    action: contract.action as HostedBrowserActionName,
+    args,
+    ...(localPath !== undefined ? { localPath } : {}),
+  };
+}
+
+function browserActionArgs(
+  contract: HostedBrowserCommandContract,
+  positionals: string[],
+  options: Record<string, unknown>,
+): Record<string, unknown> {
+  const args = compactRecord({ ...options });
+  let index = 0;
+  for (const positional of contract.positionals) {
+    if (positional.variadic) {
+      const rest = positionals.slice(index);
+      if (rest.length) args[positional.name] = rest;
+      index = positionals.length;
+      continue;
+    }
+    const value = positionals[index];
+    if (value !== undefined) args[positional.name] = value;
+    index += 1;
+  }
+
+  switch (contract.command) {
+    case 'screenshot':
+      delete args.path;
+      return args;
     case 'tab/list':
-      return { commandName: 'tab/list', action: 'tabs', args: { op: 'list' } };
+      return { ...args, op: 'list' };
     case 'tab/new':
-      return { commandName: 'tab/new', action: 'tabs', args: { op: 'new', ...(positionals[0] ? { url: positionals[0] } : {}) } };
+      return {
+        ...withoutKeys(args, ['url']),
+        op: 'new',
+        ...(typeof args.url === 'string' && args.url ? { url: args.url } : {}),
+      };
     case 'tab/select':
-      return { commandName: 'tab/select', action: 'tabs', args: { op: 'select', target: requiredPositional(positionals, 0, 'targetId') } };
+      return {
+        ...withoutKeys(args, ['targetId']),
+        op: 'select',
+        ...(typeof args.targetId === 'string' && args.targetId ? { target: args.targetId } : {}),
+      };
     case 'tab/close':
-      return { commandName: 'tab/close', action: 'tabs', args: { op: 'close', target: requiredPositional(positionals, 0, 'targetId') } };
-    case 'eval':
       return {
-        commandName: 'eval',
-        action: 'exec',
-        args: {
-          js: requiredPositional(positionals, 0, 'js'),
-          ...(options.frame !== undefined ? { frame: options.frame } : {}),
-        },
+        ...withoutKeys(args, ['targetId']),
+        op: 'close',
+        ...(typeof args.targetId === 'string' && args.targetId ? { target: args.targetId } : {}),
       };
-    case 'scroll':
-      return {
-        commandName: 'scroll',
-        action: 'scroll',
-        args: {
-          direction: requiredPositional(positionals, 0, 'direction'),
-          amount: options.amount ?? '500',
-        },
-      };
-    case 'keys':
-      return { commandName: 'keys', action: 'press-key', args: { key: requiredPositional(positionals, 0, 'key') } };
-    case 'wait':
-      return {
-        commandName: 'wait',
-        action: 'wait',
-        args: {
-          type: requiredPositional(positionals, 0, 'type'),
-          ...(positionals[1] !== undefined ? { value: positionals[1] } : {}),
-          ...(options.timeout !== undefined ? { timeout: options.timeout } : {}),
-        },
-      };
-    case 'click':
-      return { commandName: 'click', action: 'click', args: { target: requiredPositional(positionals, 0, 'target') } };
     case 'type':
-      return {
-        commandName: 'type',
-        action: 'type',
-        args: {
-          target: requiredPositional(positionals, 0, 'target'),
-          text: requiredPositional(positionals, 1, 'text'),
-        },
-      };
+      return rewriteTextTargetArgs(args, options, 'targetOrText', 'text');
     case 'fill':
-      return {
-        commandName: 'fill',
-        action: 'fill',
-        args: {
-          target: requiredPositional(positionals, 0, 'target'),
-          text: requiredPositional(positionals, 1, 'text'),
-        },
-      };
+      return rewriteTextTargetArgs(args, options, 'targetOrText', 'text');
+    case 'select':
+      return rewriteTextTargetArgs(args, options, 'targetOrOption', 'option');
     case 'upload':
-      return {
-        commandName: 'upload',
-        action: 'set-file-input',
-        args: {
-          selector: positionals[0] ?? 'input[type="file"]',
-          files: positionals.slice(1),
-        },
-      };
-    case 'console':
-      return { commandName: 'console', action: 'console', args: options };
-    case 'network':
-      return { commandName: 'network', action: 'network', args: options };
+      return rewriteUploadArgs(args, options);
     default:
-      throw new ConfigError(`Hosted browser command is not supported yet: ${leaf}`);
+      return args;
   }
 }
 
-function requiredPositional(values: string[], index: number, label: string): string {
-  const value = values[index];
-  if (value === undefined || value === '') {
-    throw new ConfigError(`Missing required browser argument: ${label}`);
+function rewriteTextTargetArgs(
+  args: Record<string, unknown>,
+  options: Record<string, unknown>,
+  firstPositionalName: string,
+  valueName: string,
+): Record<string, unknown> {
+  const first = args[firstPositionalName];
+  const value = args[valueName];
+  const next = withoutKeys(args, [firstPositionalName, valueName]);
+  if (hasSemanticLocator(options)) {
+    return {
+      ...next,
+      ...(typeof first === 'string' ? { [valueName]: first } : {}),
+    };
   }
-  return value;
+  return {
+    ...next,
+    ...(typeof first === 'string' ? { target: first } : {}),
+    ...(typeof value === 'string' ? { [valueName]: value } : {}),
+  };
+}
+
+function rewriteUploadArgs(args: Record<string, unknown>, options: Record<string, unknown>): Record<string, unknown> {
+  const targetOrFile = args.targetOrFile;
+  const files = Array.isArray(args.files) ? args.files.filter((entry): entry is string => typeof entry === 'string') : [];
+  const next = withoutKeys(args, ['targetOrFile', 'files']);
+  if (hasSemanticLocator(options)) {
+    return {
+      ...next,
+      files: [
+        ...(typeof targetOrFile === 'string' ? [targetOrFile] : []),
+        ...files,
+      ],
+    };
+  }
+  return {
+    ...next,
+    selector: typeof targetOrFile === 'string' ? targetOrFile : 'input[type="file"]',
+    files,
+  };
+}
+
+function hasSemanticLocator(args: Record<string, unknown>): boolean {
+  return ['role', 'name', 'label', 'text', 'testid'].some(key => args[key] !== undefined);
+}
+
+function compactRecord(input: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(input).filter(([, value]) => value !== undefined));
+}
+
+function withoutKeys(input: Record<string, unknown>, keys: readonly string[]): Record<string, unknown> {
+  const blocked = new Set(keys);
+  return Object.fromEntries(Object.entries(input).filter(([key, value]) => !blocked.has(key) && value !== undefined));
 }
 
 async function renderHostedBrowserResponse(

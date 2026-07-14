@@ -154,6 +154,14 @@ function manifestWithFileCommand() {
   };
 }
 
+function sampleBrowserPositionals(command: (typeof browserCommandCatalog)[number]): string[] {
+  return command.positionals.flatMap((positional) => {
+    if (positional.variadic) return [`${positional.name}-one`, `${positional.name}-two`];
+    if (positional.required) return [`${positional.name}-value`];
+    return [`${positional.name}-value`];
+  });
+}
+
 class ControlledWritable extends Writable {
   private readonly chunks: Buffer[] = [];
   private readonly releases: Array<(error?: Error | null) => void> = [];
@@ -1281,6 +1289,60 @@ describe('runHostedCli', () => {
     }
   });
 
+  it('dispatches every catalogued hosted browser command except bind to the cloud action endpoint', async () => {
+    for (const contract of browserCommandCatalog.filter(command => command.command !== 'bind')) {
+      const requests: Array<{ pathname: string; body?: Record<string, unknown> }> = [];
+      const result = await runHostedCli(['browser', 'work', ...contract.command.split('/'), ...sampleBrowserPositionals(contract)], {
+        config: makeHostedConfig({ apiBaseUrl: 'https://api.example.com', apiKey: 'key' }),
+        stdout: sink().stream,
+        stderr: sink().stream,
+        fetchImpl: async (url, init) => {
+          const parsedUrl = new URL(String(url));
+          const body = init?.body ? JSON.parse(String(init.body)) as Record<string, unknown> : undefined;
+          requests.push({ pathname: parsedUrl.pathname, ...(body ? { body } : {}) });
+          if (parsedUrl.pathname === '/v1/manifest') return manifestResponse();
+          if (parsedUrl.pathname === '/v1/browser/work/runs') {
+            return new Response(JSON.stringify({
+              ok: true,
+              run: {
+                executionId: `exec_${contract.command.replaceAll('/', '_')}`,
+                session: 'work',
+                profile: { id: 'profile_default', displayName: 'default' },
+              },
+            }), { status: 201 });
+          }
+          if (parsedUrl.pathname.endsWith('/actions')) {
+            return new Response(JSON.stringify({ ok: true, result: {}, columns: [], trace: null }), { status: 200 });
+          }
+          if (parsedUrl.pathname.endsWith('/finish')) {
+            return new Response(JSON.stringify({
+              ok: true,
+              execution: { id: `exec_${contract.command.replaceAll('/', '_')}`, status: 'succeeded' },
+            }), { status: 200 });
+          }
+          return new Response(JSON.stringify({
+            ok: false,
+            error: { code: 'UNEXPECTED', message: parsedUrl.pathname, exitCode: 1 },
+          }), { status: 500 });
+        },
+      });
+
+      expect({ command: contract.command, result }).toEqual({
+        command: contract.command,
+        result: { handled: true, exitCode: 0 },
+      });
+      expect({
+        command: contract.command,
+        start: requests.find(request => request.pathname === '/v1/browser/work/runs')?.body,
+        action: requests.find(request => request.pathname.endsWith('/actions'))?.body,
+      }).toMatchObject({
+        command: contract.command,
+        start: { command: `browser/${contract.command}` },
+        action: { action: contract.action },
+      });
+    }
+  });
+
   it('routes hosted browser positional commands through the cloud lifecycle', async () => {
     const requests: Array<{ url: string; body?: unknown }> = [];
     const stdout = sink();
@@ -1420,7 +1482,7 @@ describe('runHostedCli', () => {
       argv: ['browser', 'work', 'screenshot', '--width=10', '--height', '20', '--full-page', '--full-page'],
       command: 'browser/screenshot',
       action: 'screenshot',
-      args: { fullPage: true, width: 10, height: 20 },
+      args: { fullPage: true, annotate: false, width: 10, height: 20 },
     },
     {
       name: 'dash-leading timeout option',
@@ -1455,8 +1517,43 @@ describe('runHostedCli', () => {
       argv: ['browser', 'work', '--window', 'foreground', '--window=background', 'state'],
       command: 'browser/state',
       action: 'snapshot',
-      args: { source: 'dom' },
+      args: { source: 'dom', compareSources: false },
       windowMode: 'background',
+    },
+    {
+      name: 'retained tab and comparison options',
+      argv: ['browser', 'work', 'state', '--compare-sources', '--tab', 'page-2'],
+      command: 'browser/state',
+      action: 'snapshot',
+      args: { source: 'dom', compareSources: true, tab: 'page-2' },
+    },
+    {
+      name: 'semantic click without positional target',
+      argv: ['browser', 'work', 'click', '--role', 'button', '--name', 'Submit', '--nth', '-1', '--tab', 'page-2'],
+      command: 'browser/click',
+      action: 'click',
+      args: { role: 'button', name: 'Submit', nth: '-1', tab: 'page-2' },
+    },
+    {
+      name: 'semantic type treats first positional as text',
+      argv: ['browser', 'work', 'type', 'hello cloud', '--role', 'textbox', '--name', 'Search'],
+      command: 'browser/type',
+      action: 'type',
+      args: { role: 'textbox', name: 'Search', text: 'hello cloud' },
+    },
+    {
+      name: 'double-click retains action-specific options',
+      argv: ['browser', 'work', 'dblclick', '#ok', '--nth', '2', '--tab', 'page-2'],
+      command: 'browser/dblclick',
+      action: 'dblclick',
+      args: { target: '#ok', nth: '2', tab: 'page-2' },
+    },
+    {
+      name: 'get text reaches hosted get action',
+      argv: ['browser', 'work', 'get', 'text', '#result', '--nth', '0'],
+      command: 'browser/get/text',
+      action: 'get-text',
+      args: { target: '#result', nth: '0' },
     },
   ])('sends canonical browser request bodies for $name', async ({ argv, command, action, args, windowMode }) => {
     const requests: Array<{ url: string; body?: Record<string, unknown> }> = [];
