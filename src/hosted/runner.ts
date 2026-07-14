@@ -1,5 +1,6 @@
-import { writeFileSync } from 'node:fs';
-import yaml from 'js-yaml';
+import { readFileSync, writeFileSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { BrowserSessionArgvError, rewriteBrowserArgv } from '../cli-argv-preprocess.js';
 import { formatRootHelp, getCommandCompletionCandidates } from '../command-presentation.js';
 import {
@@ -9,8 +10,9 @@ import {
 } from '../completion-shared.js';
 import { ConfigError, EXIT_CODES, toEnvelope } from '../errors.js';
 import { getRequestedHelpFormat, renderStructuredHelp } from '../help.js';
-import { render as renderOutput } from '../output.js';
-import { HostedClient } from './client.js';
+import { findPackageRoot } from '../package-paths.js';
+import { formatErrorEnvelope, render as renderOutput } from '../output.js';
+import { HostedClient, HostedClientError } from './client.js';
 import { parseHostedInvocation } from './args.js';
 import {
   findHostedCommand,
@@ -30,6 +32,7 @@ export interface HostedRunnerOptions {
   fetchImpl?: typeof fetch;
   stdout?: NodeJS.WritableStream;
   stderr?: NodeJS.WritableStream;
+  now?: () => number;
 }
 
 export interface HostedRunResult {
@@ -49,10 +52,13 @@ export async function runHostedCli(argv: string[], opts: HostedRunnerOptions = {
   });
 
   try {
-    await dispatchHosted(argv, client, stdout);
+    await dispatchHosted(argv, client, stdout, stderr, opts.now ?? Date.now);
     return { handled: true, exitCode: EXIT_CODES.SUCCESS };
   } catch (err) {
-    stderr.write(yaml.dump(toEnvelope(err), { sortKeys: false, lineWidth: 120, noRefs: true }));
+    stderr.write(formatErrorEnvelope(toEnvelope(err), {
+      cmdName: hostedCommandName(argv),
+      traceMode: hostedTraceMode(argv),
+    }));
     return {
       handled: true,
       exitCode: errorExitCode(err),
@@ -60,7 +66,13 @@ export async function runHostedCli(argv: string[], opts: HostedRunnerOptions = {
   }
 }
 
-async function dispatchHosted(argv: string[], client: HostedClient, stdout: NodeJS.WritableStream): Promise<void> {
+async function dispatchHosted(
+  argv: string[],
+  client: HostedClient,
+  stdout: NodeJS.WritableStream,
+  stderr: NodeJS.WritableStream,
+  now: () => number,
+): Promise<void> {
   const normalized = stripGlobalOptions(argv);
   const args = normalized.argv;
   if (args.length === 0 || args[0] === '--help' || args[0] === '-h') {
@@ -74,17 +86,21 @@ async function dispatchHosted(argv: string[], client: HostedClient, stdout: Node
     );
   }
   if (args[0] === 'browser') {
-    await dispatchHostedBrowser(args, normalized.profile, client, stdout);
+    const invocation = parseHostedBrowserInvocation(args, normalized.profile);
+    const manifest = await client.getManifest();
+    validateManifestContractIdentity(manifest);
+    await dispatchHostedBrowser(invocation, client, stdout);
     return;
   }
 
   const manifest = await client.getManifest();
+  validateManifestContractIdentity(manifest);
   if (isCompletionRequest(args)) {
     stdout.write(hostedCompletions(manifest, args).join('\n') + '\n');
     return;
   }
   if (args[0] === 'list') {
-    renderHostedList(manifest, args.slice(1));
+    renderHostedList(manifest, args.slice(1), stdout);
     return;
   }
 
@@ -113,6 +129,7 @@ async function dispatchHosted(argv: string[], client: HostedClient, stdout: Node
     return;
   }
 
+  const startTime = now();
   const response = await client.execute({
     command: command.command,
     args: parsed.args,
@@ -120,14 +137,26 @@ async function dispatchHosted(argv: string[], client: HostedClient, stdout: Node
     trace: parsed.trace,
     profile: parsed.profile ?? normalized.profile,
   });
-  const result = response.result ?? response.rows ?? response.data ?? null;
-  renderOutput(result, {
-    fmt: parsed.format,
-    fmtExplicit: true,
-    columns: response.columns ?? command.columns,
-    title: command.command,
-    source: 'webcmd cloud',
-  });
+  let format: string = parsed.format;
+  if (!parsed.formatExplicit && format === 'table' && command.defaultFormat) {
+    format = command.defaultFormat;
+  }
+  const elapsed = (now() - startTime) / 1000;
+  if (response.result !== null && response.result !== undefined) {
+    renderOutput(response.result, {
+      fmt: format,
+      fmtExplicit: parsed.formatExplicit,
+      columns: response.columns ?? command.columns,
+      title: command.command,
+      elapsed,
+      source: command.command,
+      footerExtra: response.footerExtra,
+      stdout,
+    });
+  }
+  if (parsed.trace === 'on' && response.trace) {
+    stderr.write(`Webcmd trace artifact: ${response.trace.receipt}\n`);
+  }
 }
 
 interface ParsedHostedBrowserInvocation {
@@ -141,12 +170,10 @@ interface ParsedHostedBrowserInvocation {
 }
 
 async function dispatchHostedBrowser(
-  argv: string[],
-  profile: string | undefined,
+  invocation: ParsedHostedBrowserInvocation,
   client: HostedClient,
   stdout: NodeJS.WritableStream,
 ): Promise<void> {
-  const invocation = parseHostedBrowserInvocation(argv, profile);
   const response = await client.runBrowserAction(invocation.session, {
     command: invocation.command,
     action: invocation.action,
@@ -424,22 +451,21 @@ function renderHostedBrowserResponse(
     stdout.write(`${result}\n`);
     return;
   }
-  stdout.write(`${JSON.stringify(result ?? response, null, 2)}\n`);
+  stdout.write(`${JSON.stringify(result, null, 2)}\n`);
 }
 
-function renderHostedList(manifest: HostedManifest, argv: string[]): void {
-  const fmt = readFormat(argv);
+function renderHostedList(manifest: HostedManifest, argv: string[], stdout: NodeJS.WritableStream): void {
+  const { format: fmt, explicit } = readFormat(argv);
   const presentation = hostedListPresentation(manifest, fmt);
   if (presentation.displayLines) {
-    for (const line of presentation.displayLines) console.log(line);
+    for (const line of presentation.displayLines) stdout.write(`${line}\n`);
     return;
   }
   renderOutput(presentation.rows, {
     fmt,
-    fmtExplicit: true,
+    fmtExplicit: explicit,
     columns: presentation.columns,
-    title: 'webcmd/list',
-    source: 'webcmd cloud',
+    stdout,
   });
 }
 
@@ -453,12 +479,12 @@ function writeHostedHelp(
   stdout.write(format ? renderStructuredHelp(data, format) : text);
 }
 
-function readFormat(argv: string[]): string {
+function readFormat(argv: string[]): { format: string; explicit: boolean } {
   for (let i = 0; i < argv.length; i++) {
-    if (argv[i] === '-f' || argv[i] === '--format') return argv[i + 1] ?? 'table';
-    if (argv[i]?.startsWith('--format=')) return argv[i]!.slice('--format='.length);
+    if (argv[i] === '-f' || argv[i] === '--format') return { format: argv[i + 1] ?? 'table', explicit: true };
+    if (argv[i]?.startsWith('--format=')) return { format: argv[i]!.slice('--format='.length), explicit: true };
   }
-  return 'table';
+  return { format: 'table', explicit: false };
 }
 
 function stripGlobalOptions(argv: string[]): { argv: string[]; trailingCommandOptions: string[]; profile?: string } {
@@ -510,4 +536,68 @@ function errorExitCode(err: unknown): number {
     return (err as { exitCode: number }).exitCode;
   }
   return EXIT_CODES.GENERIC_ERROR;
+}
+
+interface InstalledHostedContractIdentity {
+  schemaVersion: number;
+  webcmdVersion: string;
+}
+
+function validateManifestContractIdentity(manifest: HostedManifest): void {
+  const installed = readInstalledHostedContractIdentity();
+  if (
+    manifest.metadata.contractSchemaVersion !== installed.schemaVersion
+    || manifest.metadata.webcmdPackageVersion !== installed.webcmdVersion
+  ) {
+    throw new HostedClientError(
+      'HOSTED_PROTOCOL',
+      'Webcmd Cloud manifest does not match this installed Webcmd hosted contract.',
+    );
+  }
+}
+
+function readInstalledHostedContractIdentity(): InstalledHostedContractIdentity {
+  try {
+    const moduleFile = fileURLToPath(import.meta.url);
+    const packageRoot = findPackageRoot(moduleFile);
+    const value = JSON.parse(readFileSync(path.join(packageRoot, 'hosted-contract.json'), 'utf-8')) as unknown;
+    if (
+      !value
+      || typeof value !== 'object'
+      || typeof (value as { schemaVersion?: unknown }).schemaVersion !== 'number'
+      || typeof (value as { webcmdVersion?: unknown }).webcmdVersion !== 'string'
+    ) {
+      throw new Error('invalid hosted contract identity');
+    }
+    return value as InstalledHostedContractIdentity;
+  } catch {
+    throw new HostedClientError(
+      'HOSTED_PROTOCOL',
+      'The installed Webcmd hosted contract could not be validated.',
+    );
+  }
+}
+
+function hostedCommandName(argv: readonly string[]): string | undefined {
+  const positionals: string[] = [];
+  const valueOptions = new Set(['--profile', '-f', '--format', '--trace']);
+  for (let i = 0; i < argv.length && positionals.length < 2; i += 1) {
+    const token = argv[i]!;
+    if (valueOptions.has(token)) {
+      i += 1;
+      continue;
+    }
+    if (token.startsWith('-')) continue;
+    positionals.push(token);
+  }
+  if (positionals.length < 2) return positionals[0];
+  return `${positionals[0]}/${positionals[1]}`;
+}
+
+function hostedTraceMode(argv: readonly string[]): string | undefined {
+  for (let i = 0; i < argv.length; i += 1) {
+    if (argv[i] === '--trace') return argv[i + 1];
+    if (argv[i]?.startsWith('--trace=')) return argv[i]!.slice('--trace='.length);
+  }
+  return undefined;
 }

@@ -25,7 +25,11 @@ import { HOSTED_ROOT_HELP } from '../completion-shared.js';
 
 const manifest: HostedManifest = {
   userId: 'user_demo',
-  generatedAt: '2026-07-08T00:00:00.000Z',
+  metadata: {
+    contractSchemaVersion: 1,
+    webcmdPackageVersion: '0.3.0',
+    generatedAt: '2026-07-08T00:00:00.000Z',
+  },
   commands: [
     {
       site: 'github',
@@ -49,6 +53,7 @@ const manifest: HostedManifest = {
       strategy: 'LOCAL',
       browser: false,
       args: [],
+      columns: [],
     },
   ],
 };

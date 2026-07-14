@@ -16,9 +16,13 @@ vi.mock('./execution.js', async () => {
   };
 });
 
-vi.mock('./output.js', () => ({
-  render: mockRenderOutput,
-}));
+vi.mock('./output.js', async () => {
+  const actual = await vi.importActual<typeof import('./output.js')>('./output.js');
+  return {
+    ...actual,
+    render: mockRenderOutput,
+  };
+});
 
 import { registerCommandToProgram } from './commanderAdapter.js';
 

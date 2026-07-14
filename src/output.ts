@@ -4,16 +4,28 @@
 
 import Table from 'cli-table3';
 import yaml from 'js-yaml';
+import type { ErrorEnvelope } from './errors.js';
 
 export interface RenderOptions {
   fmt?: string;
-  /** True when the user explicitly passed -f on the command line */
+  /** True when the user explicitly passed -f on the command line. */
   fmtExplicit?: boolean;
+  /** TTY state used by the pure formatter. `render` derives this from stdout. */
+  isTTY?: boolean;
   columns?: string[];
   title?: string;
   elapsed?: number;
   source?: string;
   footerExtra?: string;
+}
+
+export interface ErrorRenderOptions {
+  cmdName?: string;
+  traceMode?: unknown;
+}
+
+export interface StreamRenderOptions extends RenderOptions {
+  stdout?: NodeJS.WritableStream;
 }
 
 function normalizeRows(data: unknown): Record<string, unknown>[] {
@@ -26,126 +38,157 @@ function resolveColumns(rows: Record<string, unknown>[], opts: RenderOptions): s
   return opts.columns ?? Object.keys(rows[0] ?? {});
 }
 
-export function render(data: unknown, opts: RenderOptions = {}): void {
+/** Format output without writing to process-global streams. */
+export function formatOutput(data: unknown, opts: RenderOptions = {}): string {
   let fmt = opts.fmt ?? 'table';
-  // Non-TTY auto-downgrade only when format was NOT explicitly passed by user.
-  if (!opts.fmtExplicit) {
-    if (fmt === 'table' && !process.stdout.isTTY) fmt = 'yaml';
-  }
-  if (data === null || data === undefined) {
-    console.log(data);
-    return;
-  }
+  if (!opts.fmtExplicit && fmt === 'table' && !opts.isTTY) fmt = 'yaml';
+  if (data === null || data === undefined) return `${String(data)}\n`;
+
   switch (fmt) {
-    case 'json': renderJson(data); break;
-    case 'plain': renderPlain(data, opts); break;
-    case 'md': case 'markdown': renderMarkdown(data, opts); break;
-    case 'csv': renderCsv(data, opts); break;
-    case 'yaml': case 'yml': renderYaml(data); break;
-    default: renderTable(data, opts); break;
+    case 'json': return `${JSON.stringify(data, null, 2)}\n`;
+    case 'plain': return formatPlain(data);
+    case 'md':
+    case 'markdown': return formatMarkdown(data, opts);
+    case 'csv': return formatCsv(data, opts);
+    case 'yaml':
+    case 'yml': return `${yaml.dump(data, { sortKeys: false, lineWidth: 120, noRefs: true })}\n`;
+    default: return formatTable(data, opts);
   }
 }
 
-function renderTable(data: unknown, opts: RenderOptions): void {
-  const rows = normalizeRows(data);
-  if (!rows.length) { console.log('(no data)'); return; }
-  const columns = resolveColumns(rows, opts);
+/** Render to an injected stream, with the legacy console path retained for local callers. */
+export function render(data: unknown, opts: StreamRenderOptions = {}): void {
+  const { stdout, ...formatOptions } = opts;
+  const targetIsTTY = formatOptions.isTTY
+    ?? (stdout ? (stdout as NodeJS.WritableStream & { isTTY?: boolean }).isTTY === true : process.stdout.isTTY === true);
+  const output = formatOutput(data, { ...formatOptions, isTTY: targetIsTTY });
+  if (!output) return;
+  if (stdout) {
+    stdout.write(output);
+    return;
+  }
 
-  const header = columns.map(c => capitalize(c));
+  // Existing local command tests and embedders intercept console.log. Passing
+  // one string preserves the exact bytes console.log historically emitted.
+  console.log(output.endsWith('\n') ? output.slice(0, -1) : output);
+}
+
+/** Serialize the local error envelope without writing to process-global stderr. */
+export function formatErrorEnvelope(envelope: ErrorEnvelope, opts: ErrorRenderOptions = {}): string {
+  let output = yaml.dump(envelope, { sortKeys: false, lineWidth: 120, noRefs: true });
+  const code = envelope.error.code;
+  if (
+    opts.cmdName
+    && opts.traceMode !== 'on'
+    && opts.traceMode !== 'retain-on-failure'
+    && (code === 'SELECTOR' || code === 'EMPTY_RESULT' || code === 'ADAPTER_LOAD' || code === 'UNKNOWN')
+  ) {
+    const runnable = opts.cmdName.replace('/', ' ');
+    output += '# AutoFix: re-run with --trace=retain-on-failure for trace artifact\n';
+    output += `# webcmd ${runnable} --trace retain-on-failure\n`;
+  }
+  return output;
+}
+
+function formatTable(data: unknown, opts: RenderOptions): string {
+  const rows = normalizeRows(data);
+  if (!rows.length) return '(no data)\n';
+  const columns = resolveColumns(rows, opts);
   const table = new Table({
-    head: header.map(h => h),
+    head: columns.map(capitalize),
     style: { head: [], border: [] },
     wordWrap: true,
     wrapOnWordBoundary: true,
   });
 
   for (const row of rows) {
-    table.push(columns.map(c => {
-      const v = (row as Record<string, unknown>)[c];
-      return v === null || v === undefined ? '' : String(v);
+    table.push(columns.map((column) => {
+      const value = row[column];
+      return value === null || value === undefined ? '' : String(value);
     }));
   }
 
-  console.log();
-  if (opts.title) console.log(`  ${opts.title}`);
-  console.log(table.toString());
-  const footer: string[] = [];
-  footer.push(`${rows.length} items`);
+  const output: string[] = [''];
+  if (opts.title) output.push(`  ${opts.title}`);
+  output.push(table.toString());
+  const footer = [`${rows.length} items`];
   if (opts.elapsed !== undefined) footer.push(`${opts.elapsed.toFixed(1)}s`);
   if (opts.source) footer.push(opts.source);
   if (opts.footerExtra) footer.push(opts.footerExtra);
-  console.log(footer.join(' | '));
+  output.push(footer.join(' | '));
+  return `${output.join('\n')}\n`;
 }
 
-function renderJson(data: unknown): void {
-  console.log(JSON.stringify(data, null, 2));
-}
-function renderPlain(data: unknown, opts: RenderOptions): void {
+function formatPlain(data: unknown): string {
   const rows = normalizeRows(data);
-  if (!rows.length) return;
+  if (!rows.length) return '';
 
-  // Single-row single-field shortcuts for chat-style commands.
   if (rows.length === 1) {
-    const row = rows[0];
-    const entries = Object.entries(row);
+    const entries = Object.entries(rows[0]!);
     if (entries.length === 1) {
-      const [key, value] = entries[0];
+      const [key, value] = entries[0]!;
       if (key === 'response' || key === 'content' || key === 'markdown' || key === 'text' || key === 'value') {
-        console.log(String(value ?? ''));
-        return;
+        return `${String(value ?? '')}\n`;
       }
     }
   }
 
+  const output: string[] = [];
   rows.forEach((row, index) => {
-    const entries = Object.entries(row).filter(([, value]) => value !== undefined && value !== null && String(value) !== '');
-    entries.forEach(([key, value]) => {
-      console.log(`${key}: ${value}`);
-    });
-    if (index < rows.length - 1) console.log('');
+    for (const [key, value] of Object.entries(row)) {
+      if (value === undefined || value === null || String(value) === '') continue;
+      output.push(`${key}: ${value}`);
+    }
+    if (index < rows.length - 1) output.push('');
   });
+  return output.length > 0 ? `${output.join('\n')}\n` : '';
 }
 
-
-function renderMarkdown(data: unknown, opts: RenderOptions): void {
+function formatMarkdown(data: unknown, opts: RenderOptions): string {
   const rows = normalizeRows(data);
-  if (!rows.length) return;
+  if (!rows.length) return '';
   if (rows.length === 1) {
-    const entries = Object.entries(rows[0]);
+    const entries = Object.entries(rows[0]!);
     if (entries.length === 1) {
-      const [key, value] = entries[0];
+      const [key, value] = entries[0]!;
       if (key === 'content' || key === 'markdown' || key === 'text' || key === 'value') {
-        console.log(String(value ?? ''));
-        return;
+        return `${String(value ?? '')}\n`;
       }
     }
   }
+
   const columns = resolveColumns(rows, opts);
-  console.log('| ' + columns.join(' | ') + ' |');
-  console.log('| ' + columns.map(() => '---').join(' | ') + ' |');
-  for (const row of rows) {
-    console.log('| ' + columns.map(c => String((row as Record<string, unknown>)[c] ?? '')).join(' | ') + ' |');
-  }
+  const output = [
+    `| ${columns.map(escapeMarkdownCell).join(' | ')} |`,
+    `| ${columns.map(() => '---').join(' | ')} |`,
+    ...rows.map(row => `| ${columns.map(column => escapeMarkdownCell(row[column])).join(' | ')} |`),
+  ];
+  return `${output.join('\n')}\n`;
 }
 
-function renderCsv(data: unknown, opts: RenderOptions): void {
+function formatCsv(data: unknown, opts: RenderOptions): string {
   const rows = normalizeRows(data);
-  if (!rows.length) return;
+  if (!rows.length) return '';
   const columns = resolveColumns(rows, opts);
-  console.log(columns.join(','));
-  for (const row of rows) {
-    console.log(columns.map(c => {
-      const v = String((row as Record<string, unknown>)[c] ?? '');
-      return v.includes(',') || v.includes('"') || v.includes('\n') || v.includes('\r')
-        ? `"${v.replace(/"/g, '""')}"` : v;
-    }).join(','));
-  }
+  const output = [
+    columns.map(csvCell).join(','),
+    ...rows.map(row => columns.map(column => csvCell(row[column])).join(',')),
+  ];
+  return `${output.join('\n')}\n`;
 }
 
-function renderYaml(data: unknown): void {
-  console.log(yaml.dump(data, { sortKeys: false, lineWidth: 120, noRefs: true }));
+function escapeMarkdownCell(value: unknown): string {
+  return String(value ?? '')
+    .replace(/\\/g, '\\\\')
+    .replace(/\|/g, '\\|')
+    .replace(/\r\n|\r|\n/g, '<br>');
 }
 
-function capitalize(s: string): string {
-  return s.charAt(0).toUpperCase() + s.slice(1);
+function csvCell(value: unknown): string {
+  const text = String(value ?? '');
+  return /[,"\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+}
+
+function capitalize(value: string): string {
+  return value.charAt(0).toUpperCase() + value.slice(1);
 }

@@ -15,24 +15,42 @@ export interface HostedCommand extends CommandSurfaceMetadata {
   strategy: HostedCommandStrategy;
   browser: boolean;
   args: HostedCommandArg[];
-  columns?: string[];
+  columns: string[];
   domain?: string | null;
   defaultFormat?: string | null;
 }
 
 export interface HostedManifest {
   userId: string;
-  generatedAt: string;
+  metadata: {
+    contractSchemaVersion: number;
+    webcmdPackageVersion: string;
+    generatedAt: string;
+  };
   commands: HostedCommand[];
+}
+
+export interface HostedExecution {
+  id: string;
+  command: string;
+  status: 'succeeded' | 'failed' | 'timed_out';
+}
+
+export interface HostedTraceReceipt {
+  receipt: string;
+  executionId: string;
+  artifactsUrl?: string;
+  liveViewUrl?: string;
+  replayUrl?: string;
 }
 
 export interface HostedExecuteResponse {
   ok: true;
-  result?: unknown;
-  data?: unknown;
-  rows?: unknown;
+  result: unknown;
   columns?: string[];
-  trace?: unknown;
+  footerExtra?: string;
+  execution: HostedExecution;
+  trace?: HostedTraceReceipt;
 }
 
 export type HostedBrowserActionName =
@@ -84,9 +102,18 @@ export interface HostedBrowserActionRequest {
 
 export interface HostedBrowserActionResponse {
   ok: true;
-  result?: unknown;
-  columns?: string[];
-  trace?: unknown;
+  result: unknown;
+  columns: string[];
+  trace: HostedBrowserActionTrace | null;
+}
+
+export interface HostedBrowserActionTrace {
+  id: string;
+  receipt: string;
+  kind: string;
+  contentType?: string;
+  byteSize?: number;
+  storagePath?: string;
 }
 
 export interface HostedBrowserFinishRequest {
@@ -113,10 +140,11 @@ export interface HostedBrowserRunActionResponse extends HostedBrowserActionRespo
 export interface HostedErrorResponse {
   ok: false;
   error: {
-    code?: string;
-    message?: string;
+    code: string;
+    message: string;
     help?: string;
-    hint?: string;
     exitCode?: number;
   };
+  execution?: HostedExecution;
+  trace?: HostedTraceReceipt;
 }
