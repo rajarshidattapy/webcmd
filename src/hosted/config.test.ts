@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -11,6 +11,7 @@ import {
   makeLocalConfig,
   saveWebcmdConfig,
 } from './config.js';
+import { resolveHostedApiKey } from './credentials.js';
 
 let tempDir: string | undefined;
 
@@ -50,6 +51,40 @@ describe('hosted config', () => {
       },
     });
     expect(isHostedConfig(loadWebcmdConfig({ env }))).toBe(true);
+  });
+
+  it('migrates a legacy inline API key without losing manifest cache', async () => {
+    tempDir = await mkdtemp(join(tmpdir(), 'webcmd-config-migrate-'));
+    const env = {
+      WEBCMD_CONFIG_DIR: tempDir,
+      WEBCMD_CREDENTIAL_BACKEND: 'file',
+    } as NodeJS.ProcessEnv;
+    await writeFile(getConfigPath({ env }), JSON.stringify({
+      mode: 'hosted',
+      updatedAt: '2026-07-08T00:00:00.000Z',
+      hosted: {
+        apiBaseUrl: 'https://api.example.com',
+        apiKey: 'wcmd_legacy_secret',
+        manifestCache: {
+          fetchedAt: '2026-07-08T00:01:00.000Z',
+          manifest: { ok: true },
+        },
+      },
+    }, null, 2));
+
+    const loaded = loadWebcmdConfig({ env });
+    if (!isHostedConfig(loaded)) throw new Error('Expected hosted config');
+    const credential = await resolveHostedApiKey(loaded, { env, platform: 'linux' });
+    const persisted = await readFile(getConfigPath({ env }), 'utf8');
+
+    expect(credential).toMatchObject({
+      apiKey: 'wcmd_legacy_secret',
+      backend: 'file-fallback',
+      migrated: true,
+    });
+    expect(persisted).not.toContain('wcmd_legacy_secret');
+    expect(persisted).toContain('apiKeyRef');
+    expect(persisted).toContain('manifestCache');
   });
 
   it('writes local config and resolves default API URL from env', () => {

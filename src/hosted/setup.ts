@@ -4,13 +4,18 @@ import { writeToStream } from '../stream-write.js';
 import { HostedClient } from './client.js';
 import {
   defaultHostedApiBaseUrl,
-  makeHostedConfig,
   makeLocalConfig,
   saveWebcmdConfig,
   type ConfigIo,
 } from './config.js';
+import {
+  makeStoredHostedConfig,
+  storeHostedApiKey,
+  type HostedCredentialBackend,
+  type HostedCredentialIo,
+} from './credentials.js';
 
-export interface SetupIo extends ConfigIo {
+export interface SetupIo extends ConfigIo, HostedCredentialIo {
   input?: NodeJS.ReadableStream;
   output?: NodeJS.WritableStream;
   fetchImpl?: typeof fetch;
@@ -44,25 +49,48 @@ export async function runHostedSetup(io: SetupIo = {}): Promise<number> {
       return 2;
     }
 
-    const config = makeHostedConfig({
-      apiBaseUrl,
-      apiKey,
-      now: io.now?.() ?? new Date(),
-    });
+    let accountLabel: string | undefined;
     try {
-      await new HostedClient({
-        apiBaseUrl: config.hosted.apiBaseUrl,
-        apiKey: config.hosted.apiKey,
+      const me = await new HostedClient({
+        apiBaseUrl,
+        apiKey,
         fetchImpl: io.fetchImpl,
       }).getMe();
+      accountLabel = hostedAccountLabel(me);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       await write(`Warning: could not verify API key yet: ${message}\n`);
     }
+    const credential = await storeHostedApiKey(apiKey, io);
+    const config = makeStoredHostedConfig({
+      apiBaseUrl,
+      apiKeyRef: credential.apiKeyRef,
+      credentialBackend: credential.credentialBackend,
+      now: io.now?.() ?? new Date(),
+    });
     saveWebcmdConfig(config, io);
+    if (accountLabel) await write(`Verified Webcmd Cloud account: ${accountLabel}\n`);
+    if (credential.credentialBackend === 'file-fallback') {
+      await write('Warning: OS credential storage was unavailable; API key stored in a protected Webcmd credentials file.\n');
+    }
+    await write(`Credential backend: ${credentialBackendLabel(credential.credentialBackend)}.\n`);
     await write('Webcmd is now configured for hosted mode.\n');
     return 0;
   } finally {
     ownedReadline?.close();
   }
+}
+
+function hostedAccountLabel(body: unknown): string | undefined {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return undefined;
+  const user = (body as { user?: unknown }).user;
+  if (!user || typeof user !== 'object' || Array.isArray(user)) return undefined;
+  const record = user as { email?: unknown; id?: unknown };
+  if (typeof record.email === 'string' && record.email.trim()) return record.email.trim();
+  if (typeof record.id === 'string' && record.id.trim()) return record.id.trim();
+  return undefined;
+}
+
+function credentialBackendLabel(backend: HostedCredentialBackend): string {
+  return backend === 'os' ? 'OS credential store' : 'protected file fallback';
 }

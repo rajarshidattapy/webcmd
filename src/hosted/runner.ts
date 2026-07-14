@@ -34,12 +34,18 @@ import {
   renderHostedSiteHelp,
 } from './manifest.js';
 import { isHostedConfig, loadWebcmdConfig, type WebcmdConfig } from './config.js';
+import { resolveHostedApiKey, type HostedCredentialStore } from './credentials.js';
 import { parseHostedRootCommandSurface } from '../root-command-surface.js';
 import type { HostedBrowserActionName, HostedBrowserRunActionResponse, HostedManifest } from './types.js';
 import type { HostedBrowserCommandContract } from './contract.js';
 
 export interface HostedRunnerOptions {
   config?: WebcmdConfig;
+  credentialStore?: HostedCredentialStore;
+  env?: NodeJS.ProcessEnv;
+  homeDir?: string;
+  platform?: NodeJS.Platform;
+  randomUUID?: () => string;
   fetchImpl?: typeof fetch;
   stdout?: NodeJS.WritableStream;
   stderr?: NodeJS.WritableStream;
@@ -64,17 +70,25 @@ class CommanderCompatibleError extends Error {
 const hostedBrowserCommandsByPath = new Map(browserCommandCatalog.map(command => [command.command, command]));
 
 export async function runHostedCli(argv: string[], opts: HostedRunnerOptions = {}): Promise<HostedRunResult> {
-  const config = opts.config ?? loadWebcmdConfig();
+  const config = opts.config ?? loadWebcmdConfig({ env: opts.env, homeDir: opts.homeDir });
   if (!isHostedConfig(config)) return { handled: false, exitCode: EXIT_CODES.SUCCESS };
   const stdout = opts.stdout ?? process.stdout;
   const stderr = opts.stderr ?? process.stderr;
-  const client = new HostedClient({
-    apiBaseUrl: config.hosted.apiBaseUrl,
-    apiKey: config.hosted.apiKey,
-    fetchImpl: opts.fetchImpl,
-  });
 
   try {
+    const credential = await resolveHostedApiKey(config, {
+      credentialStore: opts.credentialStore,
+      env: opts.env,
+      homeDir: opts.homeDir,
+      platform: opts.platform,
+      randomUUID: opts.randomUUID,
+      migrate: opts.config === undefined,
+    });
+    const client = new HostedClient({
+      apiBaseUrl: config.hosted.apiBaseUrl,
+      apiKey: credential.apiKey,
+      fetchImpl: opts.fetchImpl,
+    });
     await dispatchHosted(argv, client, stdout, stderr, opts.now ?? Date.now);
     return { handled: true, exitCode: EXIT_CODES.SUCCESS };
   } catch (err) {

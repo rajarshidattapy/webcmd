@@ -6,6 +6,7 @@ import { Writable } from 'node:stream';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { getConfigPath } from './config.js';
+import { getHostedCredentialPath } from './credentials.js';
 import { runHostedSetup } from './setup.js';
 
 let tempDir: string | undefined;
@@ -25,6 +26,7 @@ describe('webcmd setup', () => {
 
     const code = await runHostedSetup({
       env,
+      platform: 'linux',
       now: () => new Date('2026-07-08T00:00:00.000Z'),
       question: async () => answers.shift() ?? '',
       write: (message) => { messages.push(message); },
@@ -41,12 +43,17 @@ describe('webcmd setup', () => {
   it('writes hosted mode and validates with /v1/me', async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'webcmd-setup-'));
     const answers = ['hosted', 'wcmd_live_test'];
-    const env = { WEBCMD_CONFIG_DIR: tempDir } as NodeJS.ProcessEnv;
+    const env = {
+      WEBCMD_CONFIG_DIR: tempDir,
+      WEBCMD_CREDENTIAL_BACKEND: 'file',
+    } as NodeJS.ProcessEnv;
     const requests: Array<{ url: string; authorization: string | null }> = [];
     const prompts: string[] = [];
+    const messages: string[] = [];
 
     const code = await runHostedSetup({
       env,
+      platform: 'linux',
       now: () => new Date('2026-07-08T00:00:00.000Z'),
       question: async (prompt) => {
         prompts.push(prompt);
@@ -59,7 +66,7 @@ describe('webcmd setup', () => {
         });
         return new Response(JSON.stringify({ ok: true, user: { id: 'user_demo' } }), { status: 200 });
       },
-      write: () => undefined,
+      write: (message) => { messages.push(message); },
     });
 
     expect(code).toBe(0);
@@ -72,9 +79,14 @@ describe('webcmd setup', () => {
       mode: 'hosted',
       hosted: {
         apiBaseUrl: 'https://api.webcmd.dev',
-        apiKey: 'wcmd_live_test',
+        apiKeyRef: expect.stringMatching(/^wcmd_cred_/),
+        credentialBackend: 'file-fallback',
       },
     });
+    expect(await readFile(getConfigPath({ env }), 'utf8')).not.toContain('wcmd_live_test');
+    expect(await readFile(getHostedCredentialPath({ env }), 'utf8')).toContain('wcmd_live_test');
+    expect(messages.join('')).toContain('Verified Webcmd Cloud account: user_demo');
+    expect(messages.join('')).toContain('Credential backend: protected file fallback.');
   });
 
   it('persists interactive local setup before the real CLI process completes', async () => {
