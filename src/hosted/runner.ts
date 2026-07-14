@@ -21,6 +21,7 @@ import { requireCompletionScriptFast } from '../completion-fast.js';
 import { HostedClient, HostedClientError } from './client.js';
 import { parseHostedInvocation } from './args.js';
 import { HostedBrowserHelp, parseHostedBrowserStructure } from './browser-args.js';
+import { materializeHostedOutputs, prepareHostedFiles, rewriteHostedOutputResultPaths } from './files.js';
 import {
   findHostedCommand,
   hostedCommandHelpData,
@@ -230,13 +231,22 @@ async function dispatchHosted(
   }
 
   const startTime = now();
-  const response = await client.execute({
-    command: command.command,
-    args: parsed.args,
-    format: parsed.format,
-    trace: parsed.trace,
-    profile: parsed.profile ?? normalized.profile,
-  });
+  const response = hasPresentFileArgument(command, parsed.args)
+    ? await executeHostedFileCommand({
+        client,
+        command,
+        args: parsed.args,
+        format: parsed.format,
+        trace: parsed.trace,
+        profile: parsed.profile ?? normalized.profile,
+      })
+    : await client.execute({
+        command: command.command,
+        args: parsed.args,
+        format: parsed.format,
+        trace: parsed.trace,
+        profile: parsed.profile ?? normalized.profile,
+      });
   let format: string = parsed.format;
   if (!parsed.formatExplicit && format === 'table' && command.defaultFormat) {
     format = command.defaultFormat;
@@ -257,6 +267,49 @@ async function dispatchHosted(
   if (parsed.trace === 'on' && response.trace) {
     await writeToStream(stderr, `Webcmd trace artifact: ${response.trace.receipt}\n`);
   }
+}
+
+function hasPresentFileArgument(
+  command: import('./types.js').HostedCommand,
+  args: Record<string, unknown>,
+): boolean {
+  return command.args.some((arg) => {
+    if (!arg.file) return false;
+    const value = args[arg.name] ?? arg.default;
+    return value !== undefined && value !== null && value !== '';
+  });
+}
+
+async function executeHostedFileCommand(input: {
+  client: HostedClient;
+  command: import('./types.js').HostedCommand;
+  args: Record<string, unknown>;
+  format: string;
+  trace: string;
+  profile?: string;
+}): Promise<import('./types.js').HostedExecuteResponse> {
+  const prepared = await prepareHostedFiles({
+    client: input.client,
+    command: input.command,
+    args: input.args,
+  });
+  const response = await input.client.runPreparedExecution({
+    executionId: prepared.executionId,
+    command: input.command.command,
+    args: prepared.args,
+    format: input.format,
+    trace: input.trace,
+    ...(input.profile !== undefined ? { profile: input.profile } : {}),
+  });
+  const materialized = await materializeHostedOutputs({
+    client: input.client,
+    response,
+    outputs: prepared.outputs,
+  });
+  return {
+    ...response,
+    result: rewriteHostedOutputResultPaths(response.result, materialized),
+  };
 }
 
 interface ParsedHostedBrowserInvocation {

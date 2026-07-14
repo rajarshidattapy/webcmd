@@ -8,9 +8,12 @@ import type {
   HostedBrowserRunActionResponse,
   HostedBrowserRunRequest,
   HostedBrowserRunResponse,
+  HostedArtifactReceipt,
   HostedErrorResponse,
   HostedExecution,
   HostedExecuteResponse,
+  HostedPrepareExecutionResponse,
+  HostedUploadArtifactResponse,
   HostedManifest,
   HostedTraceReceipt,
 } from './types.js';
@@ -78,6 +81,96 @@ export class HostedClient {
       throw protocolError('Webcmd Cloud returned an invalid execution response.');
     }
     return body;
+  }
+
+  async prepareExecution(input: { command: string }): Promise<HostedPrepareExecutionResponse> {
+    const body = await this.request('/v1/executions', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    });
+    if (!isHostedPrepareExecutionResponse(body, input.command)) {
+      throw protocolError('Webcmd Cloud returned an invalid prepared execution response.');
+    }
+    return body;
+  }
+
+  async uploadExecutionArtifact(input: {
+    executionId: string;
+    argument: string;
+    filename: string;
+    contentType: string;
+    body: Uint8Array;
+  }): Promise<HostedUploadArtifactResponse> {
+    const body = await this.request(`/v1/executions/${encodeURIComponent(input.executionId)}/artifacts/${encodeURIComponent(input.argument)}`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/octet-stream',
+        'x-webcmd-filename': input.filename,
+        'x-webcmd-content-type': input.contentType,
+      },
+      body: input.body as BodyInit,
+    });
+    if (!isHostedUploadArtifactResponse(body, input.argument)) {
+      throw protocolError('Webcmd Cloud returned an invalid artifact upload response.');
+    }
+    return body;
+  }
+
+  async runPreparedExecution(input: {
+    executionId: string;
+    command: string;
+    args: Record<string, unknown>;
+    format?: string;
+    trace?: string;
+    profile?: string;
+  }): Promise<HostedExecuteResponse> {
+    const traceMode = normalizeTraceMode(input.trace);
+    const body = await this.request(`/v1/executions/${encodeURIComponent(input.executionId)}/run`, {
+      method: 'POST',
+      body: JSON.stringify({
+        command: input.command,
+        args: input.args,
+        ...(input.format !== undefined ? { format: input.format } : {}),
+        ...(input.trace !== undefined ? { trace: input.trace } : {}),
+        ...(input.profile !== undefined ? { profile: input.profile } : {}),
+      }),
+    }, { command: input.command, traceMode });
+    if (!isHostedExecuteResponse(body, input.command, traceMode)) {
+      throw protocolError('Webcmd Cloud returned an invalid execution response.');
+    }
+    return body;
+  }
+
+  async downloadExecutionArtifact(input: {
+    executionId: string;
+    artifactId: string;
+  }): Promise<Uint8Array> {
+    const response = await this.fetchImpl(
+      `${this.apiBaseUrl}/v1/executions/${encodeURIComponent(input.executionId)}/artifacts/${encodeURIComponent(input.artifactId)}`,
+      {
+        headers: {
+          accept: 'application/octet-stream',
+          authorization: `Bearer ${this.apiKey}`,
+        },
+      },
+    );
+    if (!response.ok) {
+      const text = await response.text();
+      const body = text ? parseJson(text) : {};
+      if (!isHostedError(body)) throw protocolError('Webcmd Cloud returned an invalid artifact download failure.');
+      const error = body.error;
+      throw new HostedClientError(
+        error.code,
+        error.message,
+        error.help,
+        normalizeExitCode(error.exitCode, response.status === 401 ? EXIT_CODES.NOPERM : EXIT_CODES.GENERIC_ERROR),
+        {
+          ...(body.execution ? { execution: body.execution } : {}),
+          ...(body.trace ? { trace: body.trace } : {}),
+        },
+      );
+    }
+    return new Uint8Array(await response.arrayBuffer());
   }
 
   async startBrowserRun(session: string, input: HostedBrowserRunRequest): Promise<HostedBrowserRunResponse> {
@@ -239,7 +332,7 @@ function isHostedExecuteResponse(
   requestedCommand: string,
   traceMode: HostedTraceMode,
 ): value is HostedExecuteResponse {
-  if (!hasOnlyKeys(value, ['ok', 'result', 'columns', 'footerExtra', 'execution', 'trace'])
+  if (!hasOnlyKeys(value, ['ok', 'result', 'columns', 'footerExtra', 'execution', 'trace', 'artifacts'])
     || value.ok !== true
     || !Object.prototype.hasOwnProperty.call(value, 'result')) return false;
   if (!isHostedExecution(value.execution) || value.execution.status !== 'succeeded') return false;
@@ -248,10 +341,40 @@ function isHostedExecuteResponse(
     return false;
   }
   if (value.footerExtra !== undefined && typeof value.footerExtra !== 'string') return false;
+  if (value.artifacts !== undefined && (!Array.isArray(value.artifacts) || !value.artifacts.every(isHostedArtifactReceipt))) return false;
   if (value.trace !== undefined && !isHostedTraceReceipt(value.trace)) return false;
   if (value.trace && value.trace.executionId !== value.execution.id) return false;
   if (traceMode === 'on' ? !value.trace : value.trace !== undefined) return false;
   return true;
+}
+
+function isHostedPrepareExecutionResponse(
+  value: unknown,
+  requestedCommand: string,
+): value is HostedPrepareExecutionResponse {
+  return hasExactKeys(value, ['ok', 'execution', 'fileArguments'])
+    && value.ok === true
+    && hasExactKeys(value.execution, ['id', 'command', 'status'])
+    && typeof value.execution.id === 'string'
+    && value.execution.command === requestedCommand
+    && value.execution.status === 'queued'
+    && Array.isArray(value.fileArguments)
+    && value.fileArguments.every(isHostedFileArgument);
+}
+
+function isHostedUploadArtifactResponse(
+  value: unknown,
+  argument: string,
+): value is HostedUploadArtifactResponse {
+  if (!hasExactKeys(value, ['ok', 'artifact', 'reference']) || value.ok !== true) return false;
+  const artifact = value.artifact;
+  if (!isHostedArtifactReceipt(artifact)) return false;
+  if (artifact.argument !== argument) return false;
+  if (!hasExactKeys(value.reference, ['$webcmdArtifact'])) return false;
+  const reference = value.reference.$webcmdArtifact;
+  return hasOnlyKeys(reference, ['id', 'direction', 'filename', 'contentType'])
+    && typeof reference.id === 'string'
+    && (reference.direction === undefined || reference.direction === 'input');
 }
 
 function isHostedManifestCommand(value: unknown): boolean {
@@ -276,15 +399,67 @@ function isHostedManifestCommand(value: unknown): boolean {
 }
 
 function isHostedManifestArg(value: unknown): boolean {
-  if (!hasOnlyKeys(value, ['name', 'type', 'required', 'default', 'valueRequired', 'positional', 'help', 'choices'])) return false;
+  if (!hasOnlyKeys(value, ['name', 'type', 'required', 'default', 'valueRequired', 'positional', 'help', 'choices', 'file'])) return false;
   if (typeof value.name !== 'string') return false;
   if (value.type !== undefined && typeof value.type !== 'string') return false;
   for (const key of ['required', 'valueRequired', 'positional']) {
     if (value[key] !== undefined && typeof value[key] !== 'boolean') return false;
   }
   if (value.help !== undefined && typeof value.help !== 'string') return false;
+  if (value.file !== undefined && !isHostedArgFileMetadata(value.file)) return false;
   return value.choices === undefined
     || (Array.isArray(value.choices) && value.choices.every(choice => typeof choice === 'string'));
+}
+
+function isHostedArgFileMetadata(value: unknown): boolean {
+  return hasOnlyKeys(value, ['direction', 'pathKind', 'multiple', 'separator', 'contentTypes', 'contentType', 'maxBytes'])
+    && (value.direction === 'input' || value.direction === 'output')
+    && (value.pathKind === 'file' || value.pathKind === 'directory')
+    && typeof value.multiple === 'boolean'
+    && (value.separator === undefined || value.separator === ',')
+    && (value.contentTypes === undefined || (Array.isArray(value.contentTypes) && value.contentTypes.every(item => typeof item === 'string')))
+    && (value.contentType === undefined || typeof value.contentType === 'string')
+    && (value.maxBytes === undefined || (typeof value.maxBytes === 'number' && Number.isFinite(value.maxBytes) && value.maxBytes > 0));
+}
+
+function isHostedFileArgument(value: unknown): boolean {
+  return hasOnlyKeys(value, ['name', 'direction', 'pathKind', 'multiple', 'required', 'separator', 'contentTypes', 'contentType', 'maxBytes'])
+    && typeof value.name === 'string'
+    && (value.direction === 'input' || value.direction === 'output')
+    && (value.pathKind === 'file' || value.pathKind === 'directory')
+    && typeof value.multiple === 'boolean'
+    && typeof value.required === 'boolean'
+    && (value.separator === undefined || value.separator === ',')
+    && (value.contentTypes === undefined || (Array.isArray(value.contentTypes) && value.contentTypes.every(item => typeof item === 'string')))
+    && (value.contentType === undefined || typeof value.contentType === 'string')
+    && (value.maxBytes === undefined || (typeof value.maxBytes === 'number' && Number.isFinite(value.maxBytes) && value.maxBytes > 0));
+}
+
+function isHostedArtifactReceipt(value: unknown): value is HostedArtifactReceipt {
+  return hasOnlyKeys(value, [
+    'artifactId', 'argument', 'direction', 'pathKind', 'filename', 'contentType',
+    'byteSize', 'sha256', 'relativePath', 'expiresAt',
+  ])
+    && typeof value.artifactId === 'string'
+    && typeof value.argument === 'string'
+    && (value.direction === 'input' || value.direction === 'output')
+    && (value.pathKind === 'file' || value.pathKind === 'directory')
+    && typeof value.filename === 'string'
+    && typeof value.contentType === 'string'
+    && typeof value.byteSize === 'number'
+    && Number.isInteger(value.byteSize)
+    && value.byteSize >= 0
+    && (value.sha256 === undefined || typeof value.sha256 === 'string')
+    && (value.relativePath === undefined || isSafeRelativeArtifactPath(value.relativePath))
+    && typeof value.expiresAt === 'string';
+}
+
+function isSafeRelativeArtifactPath(value: unknown): value is string {
+  return typeof value === 'string'
+    && value.length > 0
+    && !value.startsWith('/')
+    && !value.includes('\\')
+    && !value.split('/').some(segment => !segment || segment === '.' || segment === '..' || segment.includes('\0'));
 }
 
 function isHostedBrowserRunResponse(value: unknown, requestedSession: string): value is HostedBrowserRunResponse {

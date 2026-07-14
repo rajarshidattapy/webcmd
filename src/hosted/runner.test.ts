@@ -1,4 +1,7 @@
 import { createHash } from 'node:crypto';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { Writable, type WritableOptions } from 'node:stream';
 import type { Command } from 'commander';
 import { describe, expect, it, vi } from 'vitest';
@@ -103,6 +106,51 @@ function manifestWithStructuralArguments() {
           ],
         }
       : command),
+  };
+}
+
+function manifestWithFileCommand() {
+  return {
+    ...manifest,
+    commands: [
+      ...manifest.commands,
+      {
+        site: 'files',
+        name: 'copy',
+        command: 'files/copy',
+        description: 'Copy a hosted file',
+        access: 'write',
+        strategy: 'PUBLIC',
+        browser: false,
+        args: [
+          {
+            name: 'source',
+            required: true,
+            valueRequired: true,
+            help: 'Local input file',
+            file: {
+              direction: 'input',
+              pathKind: 'file',
+              multiple: false,
+              contentTypes: ['text/plain'],
+              maxBytes: 1024,
+            },
+          },
+          {
+            name: 'output',
+            required: true,
+            valueRequired: true,
+            help: 'Local output directory',
+            file: {
+              direction: 'output',
+              pathKind: 'directory',
+              multiple: false,
+            },
+          },
+        ],
+        columns: ['status'],
+      },
+    ],
   };
 }
 
@@ -243,6 +291,137 @@ describe('runHostedCli', () => {
     expect(result).toEqual({ handled: true, exitCode: 1 });
     expect(stderr.text()).toBe("error: missing required argument 'account'\n");
     expect(stdout.text()).toBe('');
+  });
+
+  it('transfers declared files through prepare/upload/run/download before rendering output', async () => {
+    const tempDir = await mkdtemp(path.join(tmpdir(), 'webcmd-hosted-runner-files-'));
+    try {
+      const imagePath = path.join(tempDir, 'one.png');
+      const outputDir = path.join(tempDir, 'downloads');
+      await writeFile(imagePath, 'png bytes');
+      const stdout = sink();
+      const stderr = sink();
+      const calls: string[] = [];
+      const body = new Uint8Array(Buffer.from('hello cloud'));
+      const fileManifest = {
+        ...manifest,
+        commands: [{
+          site: 'twitter',
+          name: 'post',
+          command: 'twitter/post',
+          description: 'Post a tweet',
+          access: 'write',
+          strategy: 'UI',
+          browser: true,
+          args: [
+            { name: 'text', positional: true, required: true },
+            {
+              name: 'images',
+              file: {
+                direction: 'input',
+                pathKind: 'file',
+                multiple: true,
+                separator: ',',
+                contentTypes: ['image/png'],
+                maxBytes: 1024,
+              },
+            },
+            {
+              name: 'output',
+              file: {
+                direction: 'output',
+                pathKind: 'directory',
+                multiple: false,
+              },
+            },
+          ],
+          columns: ['ok'],
+        }],
+      };
+      const fetchImpl = vi.fn<typeof fetch>(async (url, init) => {
+        const requestUrl = String(url);
+        calls.push(`${init?.method ?? 'GET'} ${new URL(requestUrl).pathname}`);
+        if (requestUrl.endsWith('/v1/manifest')) {
+          return new Response(JSON.stringify({ ok: true, manifest: fileManifest }), { status: 200 });
+        }
+        if (requestUrl.endsWith('/v1/executions') && init?.method === 'POST') {
+          return new Response(JSON.stringify({
+            ok: true,
+            execution: { id: 'exec_files', command: 'twitter/post', status: 'queued' },
+            fileArguments: [],
+          }), { status: 201 });
+        }
+        if (requestUrl.endsWith('/v1/executions/exec_files/artifacts/images') && init?.method === 'POST') {
+          expect(new Headers(init.headers).get('x-webcmd-filename')).toBe('one.png');
+          expect(init.body).toEqual(new Uint8Array(Buffer.from('png bytes')));
+          return new Response(JSON.stringify({
+            ok: true,
+            artifact: {
+              artifactId: 'artifact_in',
+              argument: 'images',
+              direction: 'input',
+              pathKind: 'file',
+              filename: 'one.png',
+              contentType: 'image/png',
+              byteSize: 9,
+              expiresAt: '2026-07-15T00:00:00.000Z',
+            },
+            reference: { $webcmdArtifact: { id: 'artifact_in', direction: 'input' } },
+          }), { status: 201 });
+        }
+        if (requestUrl.endsWith('/v1/executions/exec_files/run') && init?.method === 'POST') {
+          const payload = JSON.parse(String(init.body)) as { args: Record<string, unknown> };
+          expect(JSON.stringify(payload.args)).not.toContain(tempDir);
+          expect(payload.args).toMatchObject({
+            text: 'hello',
+            images: [{ $webcmdArtifact: { id: 'artifact_in', direction: 'input' } }],
+            output: { $webcmdArtifact: { direction: 'output', filename: 'downloads' } },
+          });
+          return new Response(JSON.stringify({
+            ok: true,
+            result: null,
+            execution: { id: 'exec_files', command: 'twitter/post', status: 'succeeded' },
+            artifacts: [{
+              artifactId: 'artifact_out',
+              argument: 'output',
+              direction: 'output',
+              pathKind: 'file',
+              filename: 'result.txt',
+              contentType: 'text/plain',
+              byteSize: body.byteLength,
+              sha256: createHash('sha256').update(body).digest('hex'),
+              relativePath: 'result.txt',
+              expiresAt: '2026-07-15T00:00:00.000Z',
+            }],
+          }), { status: 200 });
+        }
+        if (requestUrl.endsWith('/v1/executions/exec_files/artifacts/artifact_out')) {
+          return new Response(body, { status: 200, headers: { 'content-type': 'text/plain' } });
+        }
+        return new Response(JSON.stringify({ ok: false, error: { code: 'UNEXPECTED', message: requestUrl, exitCode: 1 } }), { status: 500 });
+      });
+
+      const result = await runHostedCli(['twitter', 'post', 'hello', '--images', imagePath, '--output', outputDir], {
+        config: makeHostedConfig({ apiBaseUrl: 'https://api.example.com', apiKey: 'key' }),
+        stdout: stdout.stream,
+        stderr: stderr.stream,
+        fetchImpl,
+      });
+
+      expect(result).toEqual({ handled: true, exitCode: 0 });
+      expect(stdout.text()).toBe('');
+      expect(stderr.text()).toBe('');
+      await expect(readFile(path.join(outputDir, 'result.txt'), 'utf8')).resolves.toBe('hello cloud');
+      expect(calls).toEqual([
+        'GET /v1/manifest',
+        'POST /v1/executions',
+        'POST /v1/executions/exec_files/artifacts/images',
+        'POST /v1/executions/exec_files/run',
+        'GET /v1/executions/exec_files/artifacts/artifact_out',
+      ]);
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
   });
 
   it.each([
@@ -633,6 +812,134 @@ describe('runHostedCli', () => {
       },
     });
     expect(stdout.text()).toBe('[\n  {\n    "username": "octocat"\n  }\n]\n');
+  });
+
+  it('uploads local file args, runs a prepared execution, and materializes hosted output artifacts', async () => {
+    const tempDir = await mkdtemp(path.join(tmpdir(), 'webcmd-hosted-files-'));
+    try {
+      const sourcePath = path.join(tempDir, 'source.txt');
+      const outputDir = path.join(tempDir, 'downloads');
+      await writeFile(sourcePath, 'input bytes');
+      const requests: Array<{ method: string; pathname: string; body?: unknown; filename?: string | null; contentType?: string | null }> = [];
+      const stdout = sink();
+
+      const result = await runHostedCli(['files', 'copy', '--source', sourcePath, '--output', outputDir, '-f', 'json'], {
+        config: makeHostedConfig({ apiBaseUrl: 'https://api.example.com', apiKey: 'key' }),
+        stdout: stdout.stream,
+        fetchImpl: async (url, init) => {
+          const parsedUrl = new URL(String(url));
+          const rawBody = init?.body;
+          requests.push({
+            method: init?.method ?? 'GET',
+            pathname: parsedUrl.pathname,
+            ...(rawBody instanceof Uint8Array
+              ? { body: Buffer.from(rawBody).toString('utf8') }
+              : rawBody
+                ? { body: JSON.parse(String(rawBody)) as unknown }
+                : {}),
+            filename: new Headers(init?.headers).get('x-webcmd-filename'),
+            contentType: new Headers(init?.headers).get('x-webcmd-content-type'),
+          });
+          if (parsedUrl.pathname === '/v1/manifest') {
+            return new Response(JSON.stringify({ ok: true, manifest: manifestWithFileCommand() }), { status: 200 });
+          }
+          if (parsedUrl.pathname === '/v1/executions') {
+            return new Response(JSON.stringify({
+              ok: true,
+              execution: { id: 'exec_files', command: 'files/copy', status: 'queued' },
+              fileArguments: [
+                {
+                  name: 'source',
+                  direction: 'input',
+                  pathKind: 'file',
+                  multiple: false,
+                  required: true,
+                  contentTypes: ['text/plain'],
+                  maxBytes: 1024,
+                },
+                {
+                  name: 'output',
+                  direction: 'output',
+                  pathKind: 'directory',
+                  multiple: false,
+                  required: true,
+                },
+              ],
+            }), { status: 201 });
+          }
+          if (parsedUrl.pathname === '/v1/executions/exec_files/artifacts/source') {
+            return new Response(JSON.stringify({
+              ok: true,
+              artifact: {
+                artifactId: 'ea_input',
+                argument: 'source',
+                direction: 'input',
+                pathKind: 'file',
+                filename: 'source.txt',
+                contentType: 'text/plain',
+                byteSize: 11,
+                expiresAt: '2026-07-10T00:00:00.000Z',
+              },
+              reference: { $webcmdArtifact: { id: 'ea_input', direction: 'input' } },
+            }), { status: 201 });
+          }
+          if (parsedUrl.pathname === '/v1/executions/exec_files/run') {
+            return new Response(JSON.stringify({
+              ok: true,
+              result: [{ status: 'copied', file: '/private/cloud-root/nested/result.txt' }],
+              columns: ['status', 'file'],
+              execution: { id: 'exec_files', command: 'files/copy', status: 'succeeded' },
+              artifacts: [{
+                artifactId: 'ea_output',
+                argument: 'output',
+                direction: 'output',
+                pathKind: 'file',
+                filename: 'result.txt',
+                contentType: 'text/plain',
+                byteSize: 11,
+                relativePath: 'nested/result.txt',
+                expiresAt: '2026-07-10T00:00:00.000Z',
+              }],
+            }), { status: 200 });
+          }
+          if (parsedUrl.pathname === '/v1/executions/exec_files/artifacts/ea_output') {
+            return new Response('hello cloud', { status: 200 });
+          }
+          return new Response(JSON.stringify({
+            ok: false,
+            error: { code: 'NOT_FOUND', message: parsedUrl.pathname, exitCode: 1 },
+          }), { status: 404 });
+        },
+      });
+
+      expect(result).toEqual({ handled: true, exitCode: 0 });
+      expect(requests.map(request => `${request.method} ${request.pathname}`)).toEqual([
+        'GET /v1/manifest',
+        'POST /v1/executions',
+        'POST /v1/executions/exec_files/artifacts/source',
+        'POST /v1/executions/exec_files/run',
+        'GET /v1/executions/exec_files/artifacts/ea_output',
+      ]);
+      expect(requests[2]).toMatchObject({
+        body: 'input bytes',
+        filename: 'source.txt',
+        contentType: 'text/plain',
+      });
+      expect(requests[3]?.body).toMatchObject({
+        command: 'files/copy',
+        args: {
+          source: { $webcmdArtifact: { id: 'ea_input', direction: 'input' } },
+          output: { $webcmdArtifact: { direction: 'output', filename: 'downloads', contentType: 'application/octet-stream' } },
+        },
+        format: 'json',
+        trace: 'off',
+      });
+      await expect(readFile(path.join(outputDir, 'nested', 'result.txt'), 'utf8')).resolves.toBe('hello cloud');
+      expect(stdout.text()).toContain(path.join(outputDir, 'nested', 'result.txt'));
+      expect(stdout.text()).not.toContain('/private/cloud-root');
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
   });
 
   it.each([

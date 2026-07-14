@@ -87,6 +87,7 @@ export const imageCommand = cli({
         {
             name: 'op',
             help: 'Output directory (default: ~/Pictures/chatgpt)',
+            default: '~/Pictures/chatgpt',
             file: { direction: 'output', pathKind: 'directory', multiple: false },
         },
         { name: 'sd', type: 'boolean', default: false, help: 'Skip download shorthand; only show ChatGPT link' },

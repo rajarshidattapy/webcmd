@@ -131,6 +131,106 @@ describe('HostedClient', () => {
     } satisfies Partial<HostedClientError>);
   });
 
+  it('prepares, uploads, runs, and downloads execution artifacts with raw byte bodies', async () => {
+    const requests: Array<{ url: string; method: string; body?: unknown; filename?: string | null }> = [];
+    const bytes = new Uint8Array(Buffer.from('hello cloud'));
+    const client = new HostedClient({
+      apiBaseUrl: 'https://api.example.com',
+      apiKey: 'key',
+      fetchImpl: async (url, init) => {
+        const requestUrl = String(url);
+        requests.push({
+          url: requestUrl,
+          method: init?.method ?? 'GET',
+          body: init?.body,
+          filename: new Headers(init?.headers).get('x-webcmd-filename'),
+        });
+        if (requestUrl.endsWith('/v1/executions')) {
+          return new Response(JSON.stringify({
+            ok: true,
+            execution: { id: 'exec_files', command: 'twitter/post', status: 'queued' },
+            fileArguments: [{
+              name: 'images',
+              direction: 'input',
+              pathKind: 'file',
+              multiple: true,
+              required: false,
+            }],
+          }), { status: 201 });
+        }
+        if (requestUrl.endsWith('/v1/executions/exec_files/artifacts/images') && init?.method === 'POST') {
+          return new Response(JSON.stringify({
+            ok: true,
+            artifact: {
+              artifactId: 'artifact_in',
+              argument: 'images',
+              direction: 'input',
+              pathKind: 'file',
+              filename: 'one.png',
+              contentType: 'image/png',
+              byteSize: 3,
+              expiresAt: '2026-07-15T00:00:00.000Z',
+            },
+            reference: { $webcmdArtifact: { id: 'artifact_in', direction: 'input' } },
+          }), { status: 201 });
+        }
+        if (requestUrl.endsWith('/v1/executions/exec_files/run')) {
+          return new Response(JSON.stringify({
+            ok: true,
+            result: null,
+            execution: { id: 'exec_files', command: 'twitter/post', status: 'succeeded' },
+            artifacts: [{
+              artifactId: 'artifact_out',
+              argument: 'output',
+              direction: 'output',
+              pathKind: 'file',
+              filename: 'result.txt',
+              contentType: 'text/plain',
+              byteSize: bytes.byteLength,
+              expiresAt: '2026-07-15T00:00:00.000Z',
+            }],
+          }), { status: 200 });
+        }
+        if (requestUrl.endsWith('/v1/executions/exec_files/artifacts/artifact_out')) {
+          return new Response(bytes, { status: 200 });
+        }
+        return new Response(JSON.stringify({ ok: false, error: { code: 'UNKNOWN', message: requestUrl, exitCode: 1 } }), { status: 500 });
+      },
+    });
+
+    await expect(client.prepareExecution({ command: 'twitter/post' })).resolves.toMatchObject({
+      execution: { id: 'exec_files', status: 'queued' },
+      fileArguments: [{ name: 'images' }],
+    });
+    await expect(client.uploadExecutionArtifact({
+      executionId: 'exec_files',
+      argument: 'images',
+      filename: 'one.png',
+      contentType: 'image/png',
+      body: new Uint8Array(Buffer.from('png')),
+    })).resolves.toMatchObject({ reference: { $webcmdArtifact: { id: 'artifact_in' } } });
+    await expect(client.runPreparedExecution({
+      executionId: 'exec_files',
+      command: 'twitter/post',
+      args: {},
+    })).resolves.toMatchObject({ artifacts: [{ artifactId: 'artifact_out' }] });
+    await expect(client.downloadExecutionArtifact({
+      executionId: 'exec_files',
+      artifactId: 'artifact_out',
+    })).resolves.toEqual(bytes);
+
+    expect(requests.map(request => `${request.method} ${new URL(request.url).pathname}`)).toEqual([
+      'POST /v1/executions',
+      'POST /v1/executions/exec_files/artifacts/images',
+      'POST /v1/executions/exec_files/run',
+      'GET /v1/executions/exec_files/artifacts/artifact_out',
+    ]);
+    expect(requests[1]).toMatchObject({
+      filename: 'one.png',
+      body: new Uint8Array(Buffer.from('png')),
+    });
+  });
+
   it('preserves execution and trace metadata from hosted failure envelopes', async () => {
     const execution = { id: 'exec_failure', command: 'github/whoami', status: 'failed' } as const;
     const trace = {

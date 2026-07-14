@@ -5,6 +5,18 @@ export type HostedCommandStrategy = 'PUBLIC' | 'COOKIE' | 'INTERCEPT' | 'UI' | '
 
 export interface HostedCommandArg extends Arg {}
 
+export interface HostedFileArgument {
+  name: string;
+  direction: 'input' | 'output';
+  pathKind: 'file' | 'directory';
+  multiple: boolean;
+  required: boolean;
+  separator?: ',';
+  contentTypes?: string[];
+  contentType?: string;
+  maxBytes?: number;
+}
+
 export interface HostedCommand extends CommandSurfaceMetadata {
   site: string;
   name: string;
@@ -51,6 +63,47 @@ export interface HostedExecuteResponse {
   footerExtra?: string;
   execution: HostedExecution;
   trace?: HostedTraceReceipt;
+  artifacts?: HostedArtifactReceipt[];
+}
+
+export interface HostedPreparedExecution {
+  id: string;
+  command: string;
+  status: 'queued';
+}
+
+export interface HostedPrepareExecutionResponse {
+  ok: true;
+  execution: HostedPreparedExecution;
+  fileArguments: HostedFileArgument[];
+}
+
+export interface HostedArtifactReceipt {
+  artifactId: string;
+  argument: string;
+  direction: 'input' | 'output';
+  pathKind: 'file' | 'directory';
+  filename: string;
+  contentType: string;
+  byteSize: number;
+  sha256?: string;
+  relativePath?: string;
+  expiresAt: string;
+}
+
+export interface HostedArtifactReference {
+  $webcmdArtifact: {
+    id?: string;
+    direction?: 'input' | 'output';
+    filename?: string;
+    contentType?: string;
+  };
+}
+
+export interface HostedUploadArtifactResponse {
+  ok: true;
+  artifact: HostedArtifactReceipt;
+  reference: HostedArtifactReference;
 }
 
 export type HostedBrowserActionName =
