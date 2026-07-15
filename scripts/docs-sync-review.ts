@@ -5,12 +5,13 @@ import { GoogleGenAI } from '@google/genai';
 import {
   REVIEW_COMMENT_MARKER,
   REVIEW_JSON_SCHEMA,
-  buildReviewPrompt,
+  buildReviewPrompts,
   classifyPullRequest,
   createDeferredResult,
   createOverrideResult,
   createResolvedResult,
   createUnavailableResult,
+  mergeReviewResults,
   renderReviewComment,
   selectDocumentationPaths,
   validateGeminiReview,
@@ -273,7 +274,8 @@ export async function runDocsSyncReview(
   try {
     context = await loadContext(repository, pullRequestNumber, githubToken);
   } catch (error) {
-    result = createUnavailableResult(`Unable to load pull request context: ${errorMessage(error)}`);
+    io.writeStderr(`Unable to load pull request context: ${errorMessage(error)}\n`);
+    result = createUnavailableResult();
   }
 
   if (context?.draft) {
@@ -287,22 +289,28 @@ export async function runDocsSyncReview(
     } else {
       const apiKey = env.GEMINI_API_KEY?.trim();
       if (!apiKey) {
-        result = createUnavailableResult('GEMINI_API_KEY is not configured.');
+        io.writeStderr('Semantic review API key is not configured.\n');
+        result = createUnavailableResult();
       } else {
         const documentation = readDocumentation(selectDocumentationPaths(context.files));
-        const prompt = buildReviewPrompt(context, documentation);
-        try {
-          const model = env.GEMINI_DOCS_REVIEW_MODEL?.trim() || 'gemini-2.5-flash';
-          const raw = await generateReview(prompt.prompt, model, apiKey);
-          result = validateGeminiReview(raw, context, routing, prompt);
-        } catch (error) {
-          result = createUnavailableResult(errorMessage(error));
+        const prompts = buildReviewPrompts(context, documentation);
+        const reviews: ReviewResult[] = [];
+        const model = env.GEMINI_DOCS_REVIEW_MODEL?.trim() || 'gemini-2.5-flash';
+        for (const [index, prompt] of prompts.entries()) {
+          try {
+            const raw = await generateReview(prompt.prompt, model, apiKey);
+            reviews.push(validateGeminiReview(raw, context, routing, prompt));
+          } catch (error) {
+            io.writeStderr(`Semantic review chunk ${index + 1}/${prompts.length} failed: ${errorMessage(error)}\n`);
+            reviews.push(createUnavailableResult());
+          }
         }
+        result = mergeReviewResults(reviews);
       }
     }
   }
 
-  const body = renderReviewComment(result ?? createUnavailableResult('Pull request context was unavailable.'));
+  const body = renderReviewComment(result ?? createUnavailableResult());
   try {
     await upsertComment(repository, pullRequestNumber, githubToken, body);
     io.writeStdout(`Documentation sync review updated for #${pullRequestNumber}.\n`);

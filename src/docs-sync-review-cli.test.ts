@@ -10,7 +10,12 @@ import {
   upsertReviewComment,
   type RunDependencies,
 } from '../scripts/docs-sync-review.js';
-import { REVIEW_COMMENT_MARKER, REVIEW_JSON_SCHEMA, type PullRequestReviewContext } from './docs-sync-review.js';
+import {
+  MAX_DIFF_CHARACTERS,
+  REVIEW_COMMENT_MARKER,
+  REVIEW_JSON_SCHEMA,
+  type PullRequestReviewContext,
+} from './docs-sync-review.js';
 
 function context(overrides: Partial<PullRequestReviewContext> = {}): PullRequestReviewContext {
   return {
@@ -45,7 +50,7 @@ function baseDependencies(pr = context()) {
   return {
     loadContext: vi.fn(async () => pr),
     loadDocumentation: vi.fn(() => [{ path: 'docs/cli-reference.mdx', content: 'CLI reference' }]),
-    generateReview: vi.fn(async () => ({
+    generateReview: vi.fn(async (_prompt: string, _model: string, _apiKey: string) => ({
       verdict: 'likely_missing',
       summary: 'The profile option is undocumented.',
       findings: [{
@@ -57,7 +62,12 @@ function baseDependencies(pr = context()) {
         reason: 'The supplied reference omits the option.',
       }],
     })),
-    upsertComment: vi.fn(async () => undefined),
+    upsertComment: vi.fn(async (
+      _repository: string,
+      _number: number,
+      _token: string,
+      _body: string,
+    ) => undefined),
     writeSummary: vi.fn(),
   } satisfies RunDependencies;
 }
@@ -106,7 +116,7 @@ describe('runDocsSyncReview', () => {
 
   it('posts deterministic green without Gemini for resolved changes', async () => {
     const deps = baseDependencies(context({
-      files: [{ path: 'README.md', status: 'modified', patch: '+docs' }],
+      files: [{ path: 'src/cli.test.ts', status: 'modified', patch: '+test' }],
     }));
 
     const exitCode = await runDocsSyncReview(['node', 'script', '72'], ENV, deps);
@@ -127,7 +137,7 @@ describe('runDocsSyncReview', () => {
     expect(exitCode).toBe(0);
     expect(deps.generateReview).not.toHaveBeenCalled();
     expect(deps.upsertComment).toHaveBeenCalledWith(
-      'acme/webcmd', 72, 'github-token', expect.stringContaining('Semantic documentation review is currently unavailable'),
+      'acme/webcmd', 72, 'github-token', expect.stringContaining('Automated semantic review could not be completed'),
     );
   });
 
@@ -143,15 +153,38 @@ describe('runDocsSyncReview', () => {
     );
   });
 
-  it('turns Gemini errors into non-blocking orange', async () => {
+  it('turns provider errors into a neutral non-blocking orange comment', async () => {
     const deps = baseDependencies();
-    deps.generateReview.mockRejectedValueOnce(new Error('quota exceeded'));
+    deps.generateReview.mockRejectedValueOnce(new Error('Gemini quota exceeded'));
 
     const exitCode = await runDocsSyncReview(['node', 'script', '72'], ENV, deps);
 
     expect(exitCode).toBe(0);
+    const body = deps.upsertComment.mock.calls[0]![3];
+    expect(body).toContain('Automated semantic review could not be completed.');
+    expect(body).not.toMatch(/gemini/i);
+  });
+
+  it('reviews every bounded chunk of a large pull request', async () => {
+    const deps = baseDependencies(context({
+      files: [
+        { path: 'src/cli.ts', status: 'modified', patch: `+${'x'.repeat(MAX_DIFF_CHARACTERS)}` },
+        { path: 'src/types.ts', status: 'modified', patch: '+export interface LaterChange {}' },
+      ],
+    }));
+    deps.generateReview.mockResolvedValue({
+      verdict: 'no_update_needed',
+      summary: 'Covered.',
+      findings: [],
+    });
+
+    const exitCode = await runDocsSyncReview(['node', 'script', '72'], ENV, deps);
+
+    expect(exitCode).toBe(0);
+    expect(deps.generateReview.mock.calls.length).toBeGreaterThan(1);
+    expect(deps.generateReview.mock.calls.map((call) => call[0]).join('\n')).toContain('src/types.ts');
     expect(deps.upsertComment).toHaveBeenCalledWith(
-      'acme/webcmd', 72, 'github-token', expect.stringContaining('quota exceeded'),
+      'acme/webcmd', 72, 'github-token', expect.stringContaining('🟢 No documentation gap found'),
     );
   });
 
@@ -173,16 +206,18 @@ describe('runDocsSyncReview', () => {
   it('posts an unavailable advisory when pull request loading fails', async () => {
     const deps = baseDependencies();
     deps.loadContext.mockRejectedValueOnce(new Error('GitHub temporarily unavailable'));
+    const { io, read } = createIo();
 
-    const exitCode = await runDocsSyncReview(['node', 'script', '72'], ENV, deps);
+    const exitCode = await runDocsSyncReview(['node', 'script', '72'], ENV, deps, io);
 
     expect(exitCode).toBe(0);
     expect(deps.upsertComment).toHaveBeenCalledWith(
       'acme/webcmd',
       72,
       'github-token',
-      expect.stringContaining('GitHub temporarily unavailable'),
+      expect.stringContaining('Automated semantic review could not be completed'),
     );
+    expect(read().stderr).toContain('GitHub temporarily unavailable');
   });
 
   it('keeps the review non-blocking when both comment and summary writes fail', async () => {
