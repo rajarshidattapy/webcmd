@@ -803,15 +803,25 @@ interface InstalledHostedContractIdentity {
 
 function validateManifestContractIdentity(manifest: HostedManifest): void {
   const installed = readInstalledHostedContractIdentity();
+  const installedLine = hostedContractCompatibilityLine(installed.webcmdVersion);
+  const manifestLine = hostedContractCompatibilityLine(manifest.metadata.webcmdPackageVersion);
   if (
     manifest.metadata.contractSchemaVersion !== installed.schemaVersion
-    || manifest.metadata.webcmdPackageVersion !== installed.webcmdVersion
+    || !installedLine
+    || !manifestLine
+    || manifestLine !== installedLine
   ) {
     throw new HostedClientError(
       'HOSTED_PROTOCOL',
       'Webcmd Cloud manifest does not match this installed Webcmd hosted contract.',
     );
   }
+}
+
+function hostedContractCompatibilityLine(version: string): string | undefined {
+  const match = /^(\d+)\.(\d+)\.(\d+)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/.exec(version);
+  if (!match) return undefined;
+  return `${match[1]}.${match[2]}.0`;
 }
 
 function readInstalledHostedContractIdentity(): InstalledHostedContractIdentity {

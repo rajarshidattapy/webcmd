@@ -1176,12 +1176,38 @@ describe('runHostedCli', () => {
     expect(`${stdout.text()}\n${stderr.text()}`).not.toContain('kernel-secret-token');
   });
 
-  it('rejects a manifest whose identity differs from installed hosted-contract.json before execution', async () => {
+  it('accepts a manifest patch bump on the same hosted compatibility line', async () => {
+    const requests: string[] = [];
+    const stdout = sink();
+    const patchBumped = {
+      ...manifest,
+      metadata: { ...manifest.metadata, webcmdPackageVersion: '0.3.99' },
+    };
+    const result = await runHostedCli(['github', 'whoami', '-f', 'json'], {
+      config: makeHostedConfig({ apiBaseUrl: 'https://api.example.com', apiKey: 'key' }),
+      stdout: stdout.stream,
+      fetchImpl: async (url) => {
+        requests.push(String(url));
+        return String(url).endsWith('/v1/manifest')
+          ? new Response(JSON.stringify({ ok: true, manifest: patchBumped }), { status: 200 })
+          : executionResponse({ result: [{ username: 'octocat' }], columns: ['username'] });
+      },
+    });
+
+    expect(result).toEqual({ handled: true, exitCode: 0 });
+    expect(requests).toEqual([
+      'https://api.example.com/v1/manifest',
+      'https://api.example.com/v1/execute',
+    ]);
+    expect(stdout.text()).toBe('[\n  {\n    "username": "octocat"\n  }\n]\n');
+  });
+
+  it('rejects a manifest whose compatibility line differs from installed hosted-contract.json before execution', async () => {
     const requests: string[] = [];
     const stderr = sink();
     const mismatched = {
       ...manifest,
-      metadata: { ...manifest.metadata, webcmdPackageVersion: '999.0.0' },
+      metadata: { ...manifest.metadata, webcmdPackageVersion: '0.4.0' },
     };
     const result = await runHostedCli(['github', 'whoami'], {
       config: makeHostedConfig({ apiBaseUrl: 'https://api.example.com', apiKey: 'key' }),
@@ -1614,7 +1640,7 @@ describe('runHostedCli', () => {
     const stderr = sink();
     const mismatched = {
       ...manifest,
-      metadata: { ...manifest.metadata, webcmdPackageVersion: '999.0.0' },
+      metadata: { ...manifest.metadata, webcmdPackageVersion: '0.4.0' },
     };
     const result = await runHostedCli(['browser', 'work', 'state'], {
       config: makeHostedConfig({ apiBaseUrl: 'https://api.example.com', apiKey: 'key' }),
