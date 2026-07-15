@@ -9,6 +9,7 @@ import {
   getSessionLeaseKey,
   isSessionLeaseCommand,
   isUnknownOutcomeError,
+  runWithDaemonRunContext,
   setDaemonRunContext,
 } from './session-lease.js';
 import type { DaemonRunContext } from './session-lease.js';
@@ -53,6 +54,32 @@ describe('logical daemon run context', () => {
 
   it('only accepts a concrete run context through the setter', () => {
     expectTypeOf(setDaemonRunContext).parameter(0).toEqualTypeOf<DaemonRunContext>();
+  });
+
+  it('keeps overlapping async run contexts isolated across awaits', async () => {
+    let resumeFirst!: () => void;
+    const firstGate = new Promise<void>(resolve => { resumeFirst = resolve; });
+    const firstContext: DaemonRunContext = {
+      runId: 'run_111_1_1',
+      command: 'first write',
+      access: 'write',
+    };
+    const secondContext: DaemonRunContext = {
+      runId: 'run_222_2_2',
+      command: 'second write',
+      access: 'write',
+    };
+
+    const first = runWithDaemonRunContext(firstContext, async () => {
+      await firstGate;
+      return getDaemonRunContext();
+    });
+    const second = runWithDaemonRunContext(secondContext, async () => getDaemonRunContext());
+
+    expect(await second).toEqual(secondContext);
+    resumeFirst();
+    expect(await first).toEqual(firstContext);
+    expect(getDaemonRunContext()).toBeUndefined();
   });
 });
 

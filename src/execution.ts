@@ -37,7 +37,7 @@ import { probeCDP, resolveElectronEndpoint } from './launcher.js';
 import { ObservationSession, exportObservationSession, type ObservationExportResult, type ObservationExportStatus } from './observation/index.js';
 import { resolveAdapterSourcePath } from './adapter-source.js';
 import { coerceCommandArguments, TRACE_MODES, type TraceMode } from './command-surface.js';
-import { clearDaemonRunContext, generateRunId, isUnknownOutcomeError, setDaemonRunContext } from './session-lease.js';
+import { clearDaemonRunContext, generateRunId, isUnknownOutcomeError, runWithDaemonRunContext } from './session-lease.js';
 
 const _loadedModules = new Map<string, Promise<void>>();
 /** Track mtime of loaded user adapter files for hot-reload in daemon mode. */
@@ -228,10 +228,6 @@ export async function executeCommand(
       let releaseRun = true;
       let deferRunFinalization = false;
 
-      if (runId) {
-        setDaemonRunContext({ runId, command: canonicalCommand, access: 'write' });
-      }
-
       const executeAdapter = async (page: IPage): Promise<unknown> => {
         const observation = traceMode === 'off'
           ? null
@@ -302,6 +298,11 @@ export async function executeCommand(
           }
         }
         const adapterPromise = Promise.resolve(runCommand(cmd, page, kwargs, debug));
+        let adapterSettled = false;
+        void adapterPromise.then(
+          () => { adapterSettled = true; },
+          () => { adapterSettled = true; },
+        );
         try {
           const browserTimeout = userTimeoutSec !== null
             ? userTimeoutSec + RUNTIME_TIMEOUT_PADDING_SECONDS
@@ -326,7 +327,7 @@ export async function executeCommand(
           return result;
         } catch (err) {
           if (runId && isUnknownOutcomeError(err)) releaseRun = false;
-          if (runId && err instanceof TimeoutError) {
+          if (runId && err instanceof TimeoutError && !adapterSettled) {
             releaseRun = false;
             deferRunFinalization = true;
             void adapterPromise
@@ -357,9 +358,23 @@ export async function executeCommand(
           throw err;
         }
       };
+      const executeBrowser = () => browserSession(BrowserFactory, executeAdapter, {
+        session,
+        cdpEndpoint,
+        ...profileRouting,
+        windowMode,
+        surface,
+        siteSession,
+        freshPage: cmd.freshPage === true && siteSession === 'persistent',
+      });
 
       try {
-        result = await browserSession(BrowserFactory, executeAdapter, { session, cdpEndpoint, ...profileRouting, windowMode, surface, siteSession, freshPage: cmd.freshPage === true && siteSession === 'persistent' });
+        result = runId
+          ? await runWithDaemonRunContext(
+              { runId, command: canonicalCommand, access: 'write' },
+              executeBrowser,
+            )
+          : await executeBrowser();
       } catch (err) {
         if (runId && isUnknownOutcomeError(err)) releaseRun = false;
         throw err;

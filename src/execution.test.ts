@@ -25,6 +25,7 @@ import { withTimeoutMs } from './runtime.js';
 import * as runtime from './runtime.js';
 import * as capRouting from './capabilityRouting.js';
 import { clearDaemonRunContext, getDaemonRunContext } from './session-lease.js';
+import { sendCommand } from './browser/daemon-client.js';
 
 function deferred<T = void>(): {
   promise: Promise<T>;
@@ -203,6 +204,7 @@ describe('executeCommand — non-browser timeout', () => {
       if (activeRun) clearDaemonRunContext(activeRun.runId);
       mockReleaseSiteSessionLease.mockReset().mockResolvedValue(undefined);
       vi.restoreAllMocks();
+      vi.unstubAllGlobals();
     });
 
     it('binds a run only for browser-backed persistent writes', async () => {
@@ -398,6 +400,8 @@ describe('executeCommand — non-browser timeout', () => {
     it('keeps the run bound after timeout until the underlying adapter settles', async () => {
       const adapter = deferred<void>();
       let runId: string | undefined;
+      let settledRunId: string | undefined;
+      let adapterSettled = false;
       const mockPage = { closeWindow: vi.fn().mockResolvedValue(undefined) } as any;
       vi.spyOn(capRouting, 'shouldUseBrowserSession').mockReturnValue(true);
       vi.spyOn(runtime, 'browserSession').mockImplementation(async (_Factory, fn) => fn(mockPage));
@@ -411,21 +415,55 @@ describe('executeCommand — non-browser timeout', () => {
         browser: true,
         strategy: Strategy.PUBLIC,
         siteSession: 'persistent',
-        func: () => {
+        func: async () => {
           runId = getDaemonRunContext()?.runId;
-          return adapter.promise;
+          await adapter.promise;
+          settledRunId = getDaemonRunContext()?.runId;
+          adapterSettled = true;
         },
       });
 
       await expect(executeCommand(cmd, {})).rejects.toBeInstanceOf(TimeoutError);
 
       expect(runId).toMatch(/^run_/);
-      expect(getDaemonRunContext()?.runId).toBe(runId);
+      expect(adapterSettled).toBe(false);
+      expect(getDaemonRunContext()).toBeUndefined();
       expect(mockReleaseSiteSessionLease).not.toHaveBeenCalled();
 
       adapter.resolve();
-      await vi.waitFor(() => expect(getDaemonRunContext()).toBeUndefined());
+      await vi.waitFor(() => expect(adapterSettled).toBe(true));
+      expect(settledRunId).toBe(runId);
+      expect(getDaemonRunContext()).toBeUndefined();
       expect(mockReleaseSiteSessionLease).not.toHaveBeenCalled();
+    });
+
+    it('releases normally when the adapter itself rejects with TimeoutError', async () => {
+      let runId: string | undefined;
+      const adapterTimeout = new TimeoutError('adapter operation', 1);
+      const mockPage = { closeWindow: vi.fn().mockResolvedValue(undefined) } as any;
+      vi.spyOn(capRouting, 'shouldUseBrowserSession').mockReturnValue(true);
+      vi.spyOn(runtime, 'browserSession').mockImplementation(async (_Factory, fn) => fn(mockPage));
+
+      const cmd = cli({
+        site: 'test-execution',
+        name: 'run-adapter-timeout',
+        access: 'write',
+        description: 'test a settled adapter timeout releases normally',
+        browser: true,
+        strategy: Strategy.PUBLIC,
+        siteSession: 'persistent',
+        func: async () => {
+          runId = getDaemonRunContext()?.runId;
+          throw adapterTimeout;
+        },
+      });
+
+      await expect(executeCommand(cmd, {})).rejects.toBe(adapterTimeout);
+
+      expect(runId).toMatch(/^run_/);
+      expect(getDaemonRunContext()).toBeUndefined();
+      expect(mockReleaseSiteSessionLease).toHaveBeenCalledOnce();
+      expect(mockReleaseSiteSessionLease).toHaveBeenCalledWith(runId);
     });
 
     it('does not let deferred timeout cleanup clear a later run', async () => {
@@ -474,13 +512,82 @@ describe('executeCommand — non-browser timeout', () => {
 
       firstAdapter.resolve();
       await firstAdapter.promise;
-      await vi.waitFor(() => expect(getDaemonRunContext()?.runId).toBe(secondRunId));
+      await vi.waitFor(() => expect(getDaemonRunContext()).toBeUndefined());
 
       secondAdapter.resolve();
       await expect(secondExecution).resolves.toBeUndefined();
       expect(getDaemonRunContext()).toBeUndefined();
       expect(mockReleaseSiteSessionLease).toHaveBeenCalledOnce();
       expect(mockReleaseSiteSessionLease).toHaveBeenCalledWith(secondRunId);
+    });
+
+    it('keeps daemon metadata scoped to overlapping timed-out and active runs', async () => {
+      const resumeFirst = deferred<void>();
+      const firstFinished = deferred<void>();
+      const finishSecond = deferred<void>();
+      const secondStarted = deferred<void>();
+      let firstRunId: string | undefined;
+      let secondRunId: string | undefined;
+      const mockPage = { closeWindow: vi.fn().mockResolvedValue(undefined) } as any;
+      vi.spyOn(capRouting, 'shouldUseBrowserSession').mockReturnValue(true);
+      vi.spyOn(runtime, 'browserSession').mockImplementation(async (_Factory, fn) => fn(mockPage));
+      vi.spyOn(runtime, 'runWithTimeout')
+        .mockRejectedValueOnce(new TimeoutError('first logical run', 1))
+        .mockImplementationOnce(async promise => promise);
+      vi.stubGlobal('fetch', vi.fn().mockImplementation(async (_input: unknown, init?: RequestInit) => {
+        const request = JSON.parse(String(init?.body)) as { id: string };
+        return {
+          status: 200,
+          json: async () => ({ id: request.id, ok: true, data: 'ok' }),
+        } as Response;
+      }));
+
+      const firstCommand = cli({
+        site: 'test-execution',
+        name: 'run-overlap-first',
+        access: 'write',
+        description: 'test timed-out run keeps its daemon metadata',
+        browser: true,
+        strategy: Strategy.PUBLIC,
+        siteSession: 'persistent',
+        func: async () => {
+          firstRunId = getDaemonRunContext()?.runId;
+          await resumeFirst.promise;
+          await sendCommand('exec', { code: 'first-after-second' });
+          firstFinished.resolve();
+        },
+      });
+      const secondCommand = cli({
+        site: 'test-execution',
+        name: 'run-overlap-second',
+        access: 'write',
+        description: 'test active run keeps its daemon metadata',
+        browser: true,
+        strategy: Strategy.PUBLIC,
+        siteSession: 'persistent',
+        func: async () => {
+          secondRunId = getDaemonRunContext()?.runId;
+          await sendCommand('exec', { code: 'second-active' });
+          secondStarted.resolve();
+          await finishSecond.promise;
+        },
+      });
+
+      await expect(executeCommand(firstCommand, {})).rejects.toBeInstanceOf(TimeoutError);
+      const secondExecution = executeCommand(secondCommand, {});
+      await secondStarted.promise;
+      resumeFirst.resolve();
+      await firstFinished.promise;
+
+      const bodies = vi.mocked(fetch).mock.calls.map(([, init]) => (
+        JSON.parse(String(init?.body)) as { code?: string; runId?: string }
+      ));
+      expect(bodies.find(body => body.code === 'first-after-second')?.runId).toBe(firstRunId);
+      expect(bodies.find(body => body.code === 'second-active')?.runId).toBe(secondRunId);
+      expect(firstRunId).not.toBe(secondRunId);
+
+      finishSecond.resolve();
+      await expect(secondExecution).resolves.toBeUndefined();
     });
   });
 

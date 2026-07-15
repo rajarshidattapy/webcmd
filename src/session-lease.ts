@@ -1,3 +1,5 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
+
 /** Inactivity window after which an unowned session lease expires. */
 export const SESSION_LEASE_TTL_MS = 45_000;
 
@@ -15,13 +17,19 @@ export interface DaemonRunContext {
 }
 
 let activeRun: DaemonRunContext | undefined;
+const daemonRunContextStorage = new AsyncLocalStorage<DaemonRunContext>();
+
+/** Run one logical execution with context isolated across its async chain. */
+export function runWithDaemonRunContext<T>(context: DaemonRunContext, callback: () => T): T {
+  return daemonRunContextStorage.run(context, callback);
+}
 
 export function setDaemonRunContext(context: DaemonRunContext): void {
   activeRun = context;
 }
 
 export function getDaemonRunContext(): DaemonRunContext | undefined {
-  return activeRun;
+  return daemonRunContextStorage.getStore() ?? activeRun;
 }
 
 /**
