@@ -29,6 +29,7 @@ function fakePage(url: string) {
 function makeProviderWithFakePage() {
   const pages = [fakePage('https://example.com/')];
   const context = {
+    on: vi.fn(),
     pages: vi.fn(() => pages.filter((page) => !page.isClosed())),
     newPage: vi.fn(async () => {
       const page = fakePage('about:blank');
