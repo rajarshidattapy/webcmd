@@ -36,7 +36,7 @@ describe('Product Hunt browser commands', () => {
 
         await expect(command.func(pageMock({ evaluations: [challenge] }), args)).rejects.toMatchObject({
             code: 'SITE_BLOCKED',
-            exitCode: 75,
+            exitCode: 69,
         });
     });
 
@@ -48,7 +48,7 @@ describe('Product Hunt browser commands', () => {
             category: 'developer-tools',
         })).rejects.toMatchObject({
             code: 'SITE_BLOCKED',
-            exitCode: 75,
+            exitCode: 69,
         });
     });
 

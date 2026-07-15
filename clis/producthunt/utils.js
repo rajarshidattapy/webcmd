@@ -42,7 +42,7 @@ export async function assertProductHuntAccessible(page) {
         'SITE_BLOCKED',
         'Product Hunt served a security verification page',
         'Complete permitted verification in the active browser when available, then retry. Webcmd will not bypass site verification.',
-        EXIT_CODES.TEMPFAIL,
+        EXIT_CODES.SERVICE_UNAVAIL,
     );
 }
 
