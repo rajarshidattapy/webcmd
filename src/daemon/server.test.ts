@@ -295,8 +295,8 @@ describe('createDaemonServer', () => {
   });
 
   it('keeps timed-out provider work pending until provider settlement', async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(1_000);
+    let now = 1_000;
+    const dateNow = vi.spyOn(Date, 'now').mockImplementation(() => now);
     let settleProvider: (() => void) | undefined;
     let providerStarted!: () => void;
     const providerStartedPromise = new Promise<void>((resolve) => {
@@ -317,10 +317,9 @@ describe('createDaemonServer', () => {
     };
     const { baseUrl } = await start(provider);
 
-    const firstRequest = postCommand(baseUrl, persistentWrite('timed-out', 'run_100_1_1', { timeout: 1 }));
+    const firstRequest = postCommand(baseUrl, persistentWrite('timed-out', 'run_100_1_1', { timeout: 0.01 }));
     try {
       await providerStartedPromise;
-      await vi.advanceTimersByTimeAsync(1_000);
       const timedOut = await firstRequest;
       expect(timedOut.status).toBe(408);
       await expect(timedOut.json()).resolves.toMatchObject({
@@ -329,12 +328,11 @@ describe('createDaemonServer', () => {
         errorCode: 'command_result_unknown',
       });
 
-      await vi.advanceTimersByTimeAsync(45_001);
+      now = 47_001;
       const duplicateRequest = postCommand(
         baseUrl,
         persistentWrite('timed-out', 'run_100_1_1', { timeout: 120 }),
       );
-      await vi.advanceTimersByTimeAsync(0);
       const whileProviderPending = await fetch(`${baseUrl}/status`, { headers: { [DAEMON_HEADER_NAME]: '1' } });
       await expect(whileProviderPending.json()).resolves.toMatchObject({
         pending: 1,
@@ -347,7 +345,6 @@ describe('createDaemonServer', () => {
       expect(provider.commands.map((command) => command.id)).toEqual(['timed-out']);
 
       settleProvider?.();
-      await vi.advanceTimersByTimeAsync(0);
       const duplicate = await duplicateRequest;
       expect(duplicate.status).toBe(200);
       await expect(duplicate.json()).resolves.toMatchObject({ data: 'done' });
@@ -357,13 +354,14 @@ describe('createDaemonServer', () => {
         sessionLeases: [{ command: 'example write', heartbeatAt: 47_001 }],
       });
 
-      await vi.advanceTimersByTimeAsync(45_001);
+      now = 92_002;
       const reclaimed = await postCommand(baseUrl, persistentWrite('reclaimed', 'run_200_2_2'));
       expect(reclaimed.status).toBe(200);
       expect(provider.commands.map((command) => command.id)).toEqual(['timed-out', 'reclaimed']);
     } finally {
       settleProvider?.();
       await firstRequest.catch(() => undefined);
+      dateNow.mockRestore();
     }
   });
 
