@@ -4,7 +4,7 @@ import { createServer, type Server } from 'node:http';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 
 const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -201,7 +201,7 @@ function runCli(args: string[], env: NodeJS.ProcessEnv, imports: string[] = []):
   stderr: string;
 }> {
   return new Promise((resolve, reject) => {
-    const importArgs = imports.flatMap(specifier => ['--import', specifier]);
+    const importArgs = imports.flatMap(specifier => ['--import', pathToFileURL(specifier).href]);
     const child = spawn(process.execPath, [...importArgs, '--import', 'tsx', entrypoint, ...args], {
       cwd: packageRoot,
       env,

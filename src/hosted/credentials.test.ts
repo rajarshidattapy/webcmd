@@ -52,7 +52,10 @@ describe('hosted credential storage', () => {
     });
     const credentialFile = JSON.parse(await readFile(getHostedCredentialPath({ env }), 'utf8'));
     expect(credentialFile.credentials[stored.apiKeyRef]).toBe('wcmd_live_test');
-    expect((await stat(getHostedCredentialPath({ env }))).mode & 0o777).toBe(0o600);
+    const credentialMode = (await stat(getHostedCredentialPath({ env }))).mode & 0o777;
+    if (process.platform !== 'win32') {
+      expect(credentialMode).toBe(0o600);
+    }
   });
 
   it('uses an injected OS credential store when available', async () => {

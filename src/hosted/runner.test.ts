@@ -943,7 +943,10 @@ describe('runHostedCli', () => {
         trace: 'off',
       });
       await expect(readFile(path.join(outputDir, 'nested', 'result.txt'), 'utf8')).resolves.toBe('hello cloud');
-      expect(stdout.text()).toContain(path.join(outputDir, 'nested', 'result.txt'));
+      expect(JSON.parse(stdout.text())).toEqual([{
+        status: 'copied',
+        file: path.join(outputDir, 'nested', 'result.txt'),
+      }]);
       expect(stdout.text()).not.toContain('/private/cloud-root');
     } finally {
       await rm(tempDir, { recursive: true, force: true });
