@@ -16,7 +16,7 @@ export interface DaemonRunContext {
 
 let activeRun: DaemonRunContext | undefined;
 
-export function setDaemonRunContext(context: DaemonRunContext | undefined): void {
+export function setDaemonRunContext(context: DaemonRunContext): void {
   activeRun = context;
 }
 
@@ -117,11 +117,16 @@ export function getSessionLeaseKey(profileId: string, surface: string, session: 
   return `${profileId}␟${surface}␟${encodeURIComponent(session)}`;
 }
 
+/** Whether a process id is safe to interpolate into local process guidance. */
+export function isActionablePid(pid: unknown): pid is number {
+  return typeof pid === 'number' && Number.isSafeInteger(pid) && pid > 0;
+}
+
 function pidFromRunId(runId: string): number | undefined {
   const match = /^run_(\d+)_/.exec(runId);
   if (!match) return undefined;
   const pid = Number(match[1]);
-  return Number.isInteger(pid) && pid > 0 ? pid : undefined;
+  return isActionablePid(pid) ? pid : undefined;
 }
 
 export interface SessionLeaseCommand {
@@ -169,13 +174,16 @@ export class SessionLeaseRegistry {
       return { acquired: false, holder: { ...current } };
     }
 
+    const pid = input.pid === undefined
+      ? pidFromRunId(input.runId)
+      : (isActionablePid(input.pid) ? input.pid : undefined);
     const lease: SessionLease = current?.runId === input.runId
       ? { ...current, heartbeatAt: now }
       : {
           key: input.key,
           runId: input.runId,
           command: input.command,
-          pid: input.pid ?? pidFromRunId(input.runId),
+          ...(pid === undefined ? {} : { pid }),
           acquiredAt: now,
           heartbeatAt: now,
         };

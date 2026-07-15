@@ -197,4 +197,22 @@ describe('SessionBusyError platform hints', () => {
     expect(err.hint).toContain('kill 4242');
     expect(err.hint).not.toContain('Stop-Process');
   });
+
+  it.each([
+    0,
+    -1,
+    1.5,
+    Number.NaN,
+    Number.POSITIVE_INFINITY,
+    Number.MAX_SAFE_INTEGER + 1,
+  ])('does not expose non-actionable pid %s in process guidance', (pid) => {
+    const windowsError = new SessionBusyError({ ...holder, pid }, 'win32');
+    expect(windowsError.message).not.toContain(`pid ${pid}`);
+    expect(windowsError.hint).toContain('Task Manager');
+    expect(windowsError.hint).not.toContain('Stop-Process');
+
+    const posixError = new SessionBusyError({ ...holder, pid }, 'linux');
+    expect(posixError.message).not.toContain(`pid ${pid}`);
+    expect(posixError.hint).not.toContain('kill');
+  });
 });

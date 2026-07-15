@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, expectTypeOf, it, vi } from 'vitest';
 
 import {
   SESSION_LEASE_TTL_MS,
@@ -11,6 +11,7 @@ import {
   isUnknownOutcomeError,
   setDaemonRunContext,
 } from './session-lease.js';
+import type { DaemonRunContext } from './session-lease.js';
 
 const T0 = 1_000_000;
 
@@ -48,6 +49,10 @@ describe('logical daemon run context', () => {
 
     clearDaemonRunContext('run_222_2_2');
     expect(getDaemonRunContext()).toBeUndefined();
+  });
+
+  it('only accepts a concrete run context through the setter', () => {
+    expectTypeOf(setDaemonRunContext).parameter(0).toEqualTypeOf<DaemonRunContext>();
   });
 });
 
@@ -151,6 +156,42 @@ describe('SessionLeaseRegistry', () => {
       acquired: true,
       lease: expect.objectContaining({ pid: 4242 }),
     });
+  });
+
+  it.each([
+    0,
+    -1,
+    1.5,
+    Number.NaN,
+    Number.POSITIVE_INFINITY,
+    Number.MAX_SAFE_INTEGER + 1,
+  ])('omits a non-actionable explicit holder pid (%s)', (pid) => {
+    const leases = registry();
+    const result = leases.acquire(
+      { key: KEY, runId: 'opaque-run-id', command: 'chatgpt ask', pid },
+      () => false,
+    );
+
+    expect(result.acquired).toBe(true);
+    if (result.acquired) expect(result.lease).not.toHaveProperty('pid');
+  });
+
+  it.each([
+    'run_0_1700000000000_1',
+    'run_-1_1700000000000_1',
+    'run_1.5_1700000000000_1',
+    'run_NaN_1700000000000_1',
+    'run_Infinity_1700000000000_1',
+    `run_${Number.MAX_SAFE_INTEGER + 1}_1700000000000_1`,
+  ])('does not recover a non-actionable holder pid from %s', (runId) => {
+    const leases = registry();
+    const result = leases.acquire(
+      { key: KEY, runId, command: 'chatgpt ask' },
+      () => false,
+    );
+
+    expect(result.acquired).toBe(true);
+    if (result.acquired) expect(result.lease).not.toHaveProperty('pid');
   });
 
   it('treats same-run acquisition and explicit heartbeat as owner-only liveness refreshes', () => {
