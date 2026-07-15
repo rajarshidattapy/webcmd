@@ -88,6 +88,29 @@ function Get-DaemonLogMetadata {
   }
 }
 
+function Test-CloakDiagnosticLogName {
+  param(
+    [Parameter(Mandatory = $true)][string]$Name
+  )
+
+  return $Name.EndsWith('.log', [StringComparison]::OrdinalIgnoreCase) -or
+    $Name.Equals('LOG', [StringComparison]::OrdinalIgnoreCase) -or
+    $Name.Equals('LOG.old', [StringComparison]::OrdinalIgnoreCase)
+}
+
+function Get-CloakLogFileMetadata {
+  param(
+    [Parameter(Mandatory = $true)][string]$Root,
+    [Parameter(Mandatory = $true)]$File
+  )
+
+  return [pscustomobject][ordered]@{
+    relativePath = [System.IO.Path]::GetRelativePath($Root, $File.FullName)
+    bytes = $File.Length
+    lastWriteUtc = $File.LastWriteTimeUtc.ToString('o')
+  }
+}
+
 function Assert-DiagnosticsSelfTest {
   param(
     [Parameter(Mandatory = $true)][bool]$Condition,
@@ -146,6 +169,25 @@ function Invoke-DiagnosticsSelfTest {
   Assert-DiagnosticsSelfTest -Condition (-not $metadataJson.Contains($unlabeledPageText)) -Message 'unlabeled page text survived daemon metadata projection'
   Assert-DiagnosticsSelfTest -Condition ($metadataJson -notmatch '(?i)"(?:msg|text|value|data)"\s*:') -Message 'free-form daemon fields survived metadata projection'
   Assert-DiagnosticsSelfTest -Condition (($metadata.PSObject.Properties.Name -join ',') -eq 'totalCount,countsByKnownLevel,unrecognizedLevelCount,earliestTimestampUtc,latestTimestampUtc') -Message 'daemon metadata contains a non-allowlisted field'
+
+  $diagnosticLogNames = @('browser.log', 'debug.log', 'LOG', 'LOG.old')
+  foreach ($name in $diagnosticLogNames) {
+    Assert-DiagnosticsSelfTest -Condition (Test-CloakDiagnosticLogName -Name $name) -Message "known diagnostic log name was rejected: $name"
+  }
+  foreach ($name in @('Login Data', 'catalog.json', 'debug.txt', 'LOG.bak')) {
+    Assert-DiagnosticsSelfTest -Condition (-not (Test-CloakDiagnosticLogName -Name $name)) -Message "non-log profile file was accepted: $name"
+  }
+
+  $syntheticFile = [pscustomobject]@{
+    FullName = Join-Path ([System.IO.Path]::GetTempPath()) 'debug.log'
+    Length = 42
+    LastWriteTimeUtc = [DateTime]::Parse('2024-01-03T00:00:00Z').ToUniversalTime()
+    SensitiveContent = 'cookie=sensitive-value'
+  }
+  $fileMetadata = Get-CloakLogFileMetadata -Root ([System.IO.Path]::GetTempPath()) -File $syntheticFile
+  $fileMetadataJson = ConvertTo-Json -InputObject $fileMetadata -Depth 3
+  Assert-DiagnosticsSelfTest -Condition (($fileMetadata.PSObject.Properties.Name -join ',') -eq 'relativePath,bytes,lastWriteUtc') -Message 'Cloak file metadata contains a non-allowlisted field'
+  Assert-DiagnosticsSelfTest -Condition (-not $fileMetadataJson.Contains('sensitive-value')) -Message 'Cloak file contents survived metadata projection'
 
   Write-Host 'Diagnostics self-test passed.'
 }
@@ -222,13 +264,9 @@ $cloakRoot = if ($env:USERPROFILE) { Join-Path $env:USERPROFILE '.webcmd/cloak' 
 $cloakLogMetadata = @()
 if ($cloakRoot -and (Test-Path -LiteralPath $cloakRoot)) {
   $cloakLogMetadata = Get-ChildItem -LiteralPath $cloakRoot -Recurse -File -ErrorAction SilentlyContinue |
-    Where-Object { $_.Extension -eq '.log' -or $_.Name -match '(?i)(debug|log)' } |
+    Where-Object { Test-CloakDiagnosticLogName -Name $_.Name } |
     ForEach-Object {
-      [ordered]@{
-        relativePath = [System.IO.Path]::GetRelativePath($cloakRoot, $_.FullName)
-        bytes = $_.Length
-        lastWriteUtc = $_.LastWriteTimeUtc.ToString('o')
-      }
+      Get-CloakLogFileMetadata -Root $cloakRoot -File $_
     }
 }
 Write-SanitizedJson -Path (Join-Path $artifactRoot 'cloak-log-metadata.json') -Value @($cloakLogMetadata)

@@ -266,7 +266,17 @@ export async function sendCommandFull(
 }
 
 export async function releaseSiteSessionLease(runId: string): Promise<void> {
-  await sendCommand('lease-release', { runId }).catch(() => undefined);
+  const command: DaemonCommand = {
+    id: generateId(),
+    action: 'lease-release',
+    runId,
+  };
+  await requestDaemon('/command', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(command),
+    timeout: 2_000,
+  }).catch(() => undefined);
 }
 
 export async function bindTab(session: string, opts: { contextId?: string; preferredContextId?: string; page?: string; index?: number; windowMode?: BrowserWindowMode } = {}): Promise<unknown> {

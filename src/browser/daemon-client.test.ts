@@ -302,22 +302,49 @@ describe('daemon-client', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it('releaseSiteSessionLease sends a daemon-local release and ignores failures', async () => {
+  it('releaseSiteSessionLease makes one best-effort POST without starting or retrying the daemon', async () => {
     setDaemonRunContext({
       runId: 'run_9999_newer_2',
       command: 'newer write',
       access: 'write',
     });
-    vi.mocked(fetch).mockRejectedValueOnce(new Error('daemon stopped'));
+    const ensureSpy = vi.spyOn(daemonLifecycle, 'ensureBrowserBridgeReady');
+    vi.mocked(fetch).mockRejectedValueOnce(new TypeError('fetch failed'));
 
     await expect(releaseSiteSessionLease('run_4242_1000_1')).resolves.toBeUndefined();
 
     expect(fetch).toHaveBeenCalledTimes(1);
+    expect(ensureSpy).not.toHaveBeenCalled();
     const body = JSON.parse(String(vi.mocked(fetch).mock.calls[0][1]?.body));
     expect(body).toMatchObject({
       action: 'lease-release',
       runId: 'run_4242_1000_1',
     });
+  });
+
+  it('releaseSiteSessionLease aborts its best-effort POST after two seconds', async () => {
+    vi.useFakeTimers();
+    try {
+      let aborted = false;
+      vi.mocked(fetch).mockImplementationOnce((_url, init) => new Promise((_, reject) => {
+        init?.signal?.addEventListener('abort', () => {
+          aborted = true;
+          reject(Object.assign(new Error('This operation was aborted'), { name: 'AbortError' }));
+        });
+      }));
+
+      const pending = releaseSiteSessionLease('run_4242_1000_1');
+
+      await vi.advanceTimersByTimeAsync(1_999);
+      expect(aborted).toBe(false);
+
+      await vi.advanceTimersByTimeAsync(1);
+      expect(aborted).toBe(true);
+      await expect(pending).resolves.toBeUndefined();
+      expect(fetch).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('sendCommand does not retry command_result_unknown even when the message looks transient', async () => {
