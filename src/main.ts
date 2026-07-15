@@ -18,6 +18,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { getCompletionScriptFast, getCompletionsFromManifest, hasAllManifests } from './completion-fast.js';
+import { HOSTED_ROOT_HELP } from './completion-shared.js';
 import { findPackageRoot, getCliManifestPath } from './package-paths.js';
 import { PKG_VERSION } from './version.js';
 import { EXIT_CODES } from './errors.js';
@@ -30,20 +31,9 @@ const __dirname = path.dirname(__filename);
 // Use findPackageRoot so the path works both in dev (src/main.ts) and prod (dist/src/main.js).
 const BUILTIN_CLIS = path.join(findPackageRoot(__filename), 'clis');
 const USER_CLIS = path.join(os.homedir(), CONFIG_DIR_NAME, 'clis');
-const HOSTED_LOCAL_COMMANDS = new Set([
-  'adapter',
-  'antigravity',
-  'auth',
-  'convention-audit',
-  'daemon',
-  'doctor',
-  'external',
-  'plugin',
-  'profile',
-  'skills',
-  'validate',
-  'verify',
-]);
+// Derived from the canonical list (also drives hosted help text and
+// hosted/runner.ts's rejection path) so the two never drift apart.
+const HOSTED_LOCAL_COMMANDS = new Set((HOSTED_ROOT_HELP.localOnlyCommands ?? []).map(command => command.name));
 
 // ── Ultra-fast path: lightweight commands bypass full discovery ──────────
 // These are high-frequency or trivial paths that must not pay the startup tax.
