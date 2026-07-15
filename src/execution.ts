@@ -331,7 +331,10 @@ export async function executeCommand(
             releaseRun = false;
             deferRunFinalization = true;
             void adapterPromise
-              .finally(() => finalizeRun(runId, false))
+              .then(
+                () => finalizeRun(runId, true),
+                (lateError) => finalizeRun(runId, !isUnknownOutcomeError(lateError)),
+              )
               .catch(() => undefined);
           }
           if (observation) {

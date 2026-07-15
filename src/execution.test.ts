@@ -397,7 +397,7 @@ describe('executeCommand — non-browser timeout', () => {
       expect(mockReleaseSiteSessionLease).not.toHaveBeenCalled();
     });
 
-    it('keeps the run bound after timeout until the underlying adapter settles', async () => {
+    it('releases after a wrapper timeout when the adapter later succeeds', async () => {
       const adapter = deferred<void>();
       let runId: string | undefined;
       let settledRunId: string | undefined;
@@ -433,6 +433,78 @@ describe('executeCommand — non-browser timeout', () => {
       adapter.resolve();
       await vi.waitFor(() => expect(adapterSettled).toBe(true));
       expect(settledRunId).toBe(runId);
+      expect(getDaemonRunContext()).toBeUndefined();
+      await vi.waitFor(() => expect(mockReleaseSiteSessionLease).toHaveBeenCalledOnce());
+      expect(mockReleaseSiteSessionLease).toHaveBeenCalledWith(runId);
+    });
+
+    it('releases after a wrapper timeout when the adapter later fails ordinarily', async () => {
+      const adapter = deferred<void>();
+      let runId: string | undefined;
+      const mockPage = { closeWindow: vi.fn().mockResolvedValue(undefined) } as any;
+      vi.spyOn(capRouting, 'shouldUseBrowserSession').mockReturnValue(true);
+      vi.spyOn(runtime, 'browserSession').mockImplementation(async (_Factory, fn) => fn(mockPage));
+      vi.spyOn(runtime, 'runWithTimeout').mockRejectedValueOnce(new TimeoutError('logical run', 1));
+
+      const cmd = cli({
+        site: 'test-execution',
+        name: 'run-timeout-late-ordinary-failure',
+        access: 'write',
+        description: 'test late ordinary failure releases run ownership',
+        browser: true,
+        strategy: Strategy.PUBLIC,
+        siteSession: 'persistent',
+        func: async () => {
+          runId = getDaemonRunContext()?.runId;
+          await adapter.promise;
+        },
+      });
+
+      await expect(executeCommand(cmd, {})).rejects.toBeInstanceOf(TimeoutError);
+      expect(runId).toMatch(/^run_/);
+      expect(mockReleaseSiteSessionLease).not.toHaveBeenCalled();
+
+      adapter.reject(new Error('late ordinary failure'));
+      await vi.waitFor(() => expect(mockReleaseSiteSessionLease).toHaveBeenCalledOnce());
+      expect(mockReleaseSiteSessionLease).toHaveBeenCalledWith(runId);
+      expect(getDaemonRunContext()).toBeUndefined();
+    });
+
+    it('retains ownership for TTL after a wrapper timeout when the adapter later has an unknown outcome', async () => {
+      const adapter = deferred<void>();
+      let runId: string | undefined;
+      let adapterSettled = false;
+      const mockPage = { closeWindow: vi.fn().mockResolvedValue(undefined) } as any;
+      vi.spyOn(capRouting, 'shouldUseBrowserSession').mockReturnValue(true);
+      vi.spyOn(runtime, 'browserSession').mockImplementation(async (_Factory, fn) => fn(mockPage));
+      vi.spyOn(runtime, 'runWithTimeout').mockRejectedValueOnce(new TimeoutError('logical run', 1));
+
+      const cmd = cli({
+        site: 'test-execution',
+        name: 'run-timeout-late-unknown-failure',
+        access: 'write',
+        description: 'test late unknown failure retains ownership for TTL',
+        browser: true,
+        strategy: Strategy.PUBLIC,
+        siteSession: 'persistent',
+        func: async () => {
+          runId = getDaemonRunContext()?.runId;
+          try {
+            await adapter.promise;
+          } finally {
+            adapterSettled = true;
+          }
+        },
+      });
+
+      await expect(executeCommand(cmd, {})).rejects.toBeInstanceOf(TimeoutError);
+      expect(runId).toMatch(/^run_/);
+      expect(mockReleaseSiteSessionLease).not.toHaveBeenCalled();
+
+      const unknownOutcome = new Error('late result unknown') as Error & { cause?: unknown };
+      unknownOutcome.cause = { code: 'COMMAND_RESULT_UNKNOWN' };
+      adapter.reject(unknownOutcome);
+      await vi.waitFor(() => expect(adapterSettled).toBe(true));
       expect(getDaemonRunContext()).toBeUndefined();
       expect(mockReleaseSiteSessionLease).not.toHaveBeenCalled();
     });
@@ -517,7 +589,8 @@ describe('executeCommand — non-browser timeout', () => {
       secondAdapter.resolve();
       await expect(secondExecution).resolves.toBeUndefined();
       expect(getDaemonRunContext()).toBeUndefined();
-      expect(mockReleaseSiteSessionLease).toHaveBeenCalledOnce();
+      expect(mockReleaseSiteSessionLease).toHaveBeenCalledTimes(2);
+      expect(mockReleaseSiteSessionLease).toHaveBeenCalledWith(firstRunId);
       expect(mockReleaseSiteSessionLease).toHaveBeenCalledWith(secondRunId);
     });
 
