@@ -92,17 +92,47 @@ describe('hosted CLI process lifecycle', () => {
     expect(result.stdout).toContain('Local-only commands:');
     await expect(readFile(fixture.discoverySentinel, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
   }, 20_000);
+
+  it('runs skills install locally without contacting Cloud when hosted mode is configured', async () => {
+    const fixture = await createHostedFixture('success');
+    const installDir = path.join(fixture.root, 'agent-skills');
+
+    const result = await runCli(['skills', 'install', '--path', installDir, '--json'], fixture.env);
+
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe('');
+    const body = JSON.parse(result.stdout) as {
+      skills: Array<{ name: string; stableLink: string; destination?: string }>;
+    };
+    expect(body.skills.map(skill => skill.name)).toEqual([
+      'smart-search',
+      'webcmd-adapter-author',
+      'webcmd-autofix',
+      'webcmd-browser',
+      'webcmd-browser-sitemap',
+      'webcmd-sitemap-author',
+      'webcmd-usage',
+    ]);
+    expect(body.skills.every(skill => skill.destination?.startsWith(installDir))).toBe(true);
+    await expect(readFile(path.join(installDir, 'webcmd-usage', 'SKILL.md'), 'utf8'))
+      .resolves.toContain('webcmd-usage');
+    await expect(readFile(fixture.discoverySentinel, 'utf8')).resolves.toBe('read');
+    expect(fixture.requests).toEqual([]);
+  }, 20_000);
 });
 
 async function createHostedFixture(outcome: 'success' | 'failure'): Promise<{
+  root: string;
   env: NodeJS.ProcessEnv;
   discoverySentinel: string;
+  requests: string[];
 }> {
   const root = await mkdtemp(path.join(tmpdir(), 'webcmd-hosted-lifecycle-'));
   tempRoots.push(root);
   const configDir = path.join(root, 'config');
   const userClis = path.join(root, '.webcmd', 'clis', 'lifecycle-sentinel');
   const discoverySentinel = path.join(root, 'local-discovery-ran');
+  const requests: string[] = [];
   await mkdir(configDir, { recursive: true });
   await mkdir(userClis, { recursive: true });
   await writeFile(path.join(userClis, 'sentinel.js'), [
@@ -113,6 +143,7 @@ async function createHostedFixture(outcome: 'success' | 'failure'): Promise<{
   ].join('\n'));
 
   const server = createServer((request, response) => {
+    requests.push(`${request.method ?? 'GET'} ${request.url ?? '/'}`);
     if (request.url === '/v1/manifest') {
       sendChunkedJson(response, {
         ok: true,
@@ -177,10 +208,13 @@ async function createHostedFixture(outcome: 'success' | 'failure'): Promise<{
   })}\n`, { mode: 0o600 });
 
   return {
+    root,
     discoverySentinel,
+    requests,
     env: {
       ...process.env,
       HOME: root,
+      USERPROFILE: root,
       WEBCMD_CONFIG_DIR: configDir,
       WEBCMD_NO_UPDATE_CHECK: '1',
     },

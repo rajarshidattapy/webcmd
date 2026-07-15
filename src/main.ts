@@ -30,6 +30,20 @@ const __dirname = path.dirname(__filename);
 // Use findPackageRoot so the path works both in dev (src/main.ts) and prod (dist/src/main.js).
 const BUILTIN_CLIS = path.join(findPackageRoot(__filename), 'clis');
 const USER_CLIS = path.join(os.homedir(), CONFIG_DIR_NAME, 'clis');
+const HOSTED_LOCAL_COMMANDS = new Set([
+  'adapter',
+  'antigravity',
+  'auth',
+  'convention-audit',
+  'daemon',
+  'doctor',
+  'external',
+  'plugin',
+  'profile',
+  'skills',
+  'validate',
+  'verify',
+]);
 
 // ── Ultra-fast path: lightweight commands bypass full discovery ──────────
 // These are high-frequency or trivial paths that must not pay the startup tax.
@@ -75,13 +89,23 @@ if (!fastPathHandled) {
     process.exitCode = await runHostedSetup();
   } else {
     const { shouldUseHostedMode } = await import('./hosted/config.js');
-    if (shouldUseHostedMode()) {
+    if (shouldUseHostedMode() && !(await shouldRunLocalCommandInHostedMode(argv))) {
       const { runHostedCli } = await import('./hosted/runner.js');
       const result = await runHostedCli(argv);
       process.exitCode = result.exitCode;
     } else {
       await runLocalMain();
     }
+  }
+}
+
+async function shouldRunLocalCommandInHostedMode(input: readonly string[]): Promise<boolean> {
+  try {
+    const { parseHostedRootCommandSurface } = await import('./root-command-surface.js');
+    const parsed = parseHostedRootCommandSurface(input);
+    return parsed.kind === 'dispatch' && HOSTED_LOCAL_COMMANDS.has(parsed.argv[0]!);
+  } catch {
+    return false;
   }
 }
 
