@@ -5,6 +5,10 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {
+  formatPackageBinSpawnFailure,
+  packageBinSpawnOptions,
+} from '../dist/src/package-bin-process.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
@@ -20,14 +24,11 @@ function run(command, args, opts = {}) {
     cwd: ROOT,
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'pipe'],
+    ...packageBinSpawnOptions(process.platform, command),
     ...opts,
   });
-  if (result.status !== 0) {
-    fail([
-      `${command} ${args.join(' ')} exited ${result.status}`,
-      result.stdout.trim(),
-      result.stderr.trim(),
-    ].filter(Boolean).join('\n'));
+  if (result.error || result.status !== 0) {
+    fail(formatPackageBinSpawnFailure(command, args, result));
   }
   return result;
 }
