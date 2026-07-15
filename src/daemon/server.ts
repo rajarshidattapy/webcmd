@@ -26,6 +26,38 @@ interface PendingCommand {
   leaseKey?: string;
 }
 
+function commandTimeoutMs(command: BrowserRuntimeCommand): number {
+  return typeof command.deadlineAt === 'number' && command.deadlineAt > 0
+    ? Math.max(1000, command.deadlineAt - Date.now())
+    : (typeof command.timeout === 'number' && command.timeout > 0 ? command.timeout * 1000 : 120_000);
+}
+
+function waitForCommandResult(
+  command: BrowserRuntimeCommand,
+  providerPromise: Promise<BrowserRuntimeResult>,
+): Promise<BrowserRuntimeResult> {
+  const timeoutMs = commandTimeoutMs(command);
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const responsePromise = Promise.race([
+    providerPromise,
+    new Promise<BrowserRuntimeResult>((resolve) => {
+      timeoutId = setTimeout(() => {
+        const failure = buildCommandTimeoutFailure(command.action, timeoutMs);
+        resolve({
+          id: command.id,
+          ok: false,
+          errorCode: failure.errorCode,
+          error: failure.message,
+          errorHint: failure.errorHint,
+        });
+      }, timeoutMs);
+    }),
+  ]);
+  return responsePromise.finally(() => {
+    if (timeoutId) clearTimeout(timeoutId);
+  });
+}
+
 function readBody(req: IncomingMessage): Promise<string> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
@@ -157,7 +189,7 @@ export function createDaemonServer(provider: BrowserRuntimeProvider, opts: Daemo
         }
         const existing = pending.get(body.id);
         if (existing) {
-          const result = await existing.promise;
+          const result = await waitForCommandResult(body, existing.promise);
           jsonResponse(res, result.ok ? 200 : result.errorCode === 'command_result_unknown' ? 408 : 400, result);
           return;
         }
@@ -188,31 +220,12 @@ export function createDaemonServer(provider: BrowserRuntimeProvider, opts: Daemo
             return;
           }
         }
-        const timeoutMs = typeof body.deadlineAt === 'number' && body.deadlineAt > 0
-          ? Math.max(1000, body.deadlineAt - Date.now())
-          : (typeof body.timeout === 'number' && body.timeout > 0 ? body.timeout * 1000 : 120_000);
-        let timeoutId: ReturnType<typeof setTimeout> | undefined;
-        const commandPromise: Promise<BrowserRuntimeResult> = Promise.race([
-          provider.dispatch(body),
-          new Promise<BrowserRuntimeResult>((resolve) => {
-            timeoutId = setTimeout(() => {
-              const failure = buildCommandTimeoutFailure(body.action, timeoutMs);
-              resolve({
-                id: body.id,
-                ok: false,
-                errorCode: failure.errorCode,
-                error: failure.message,
-                errorHint: failure.errorHint,
-              });
-            }, timeoutMs);
-          }),
-        ]).finally(() => {
-          if (timeoutId) clearTimeout(timeoutId);
+        const commandPromise = provider.dispatch(body).finally(() => {
           if (leaseKey && runId) leases.heartbeat(leaseKey, runId);
           pending.delete(body.id);
         });
         pending.set(body.id, { promise: commandPromise, runId, leaseKey });
-        const result = await commandPromise;
+        const result = await waitForCommandResult(body, commandPromise);
         if (!result.ok) pushLog('warn', `Command ${body.id} failed: ${result.error ?? result.errorCode ?? 'unknown error'}`);
         jsonResponse(res, result.ok ? 200 : result.errorCode === 'command_result_unknown' ? 408 : 400, result);
       } catch (err) {

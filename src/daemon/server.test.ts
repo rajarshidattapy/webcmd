@@ -44,6 +44,7 @@ describe('createDaemonServer', () => {
 
   afterEach(async () => {
     while (servers.length) await servers.pop()!.close();
+    vi.useRealTimers();
   });
 
   async function start(provider = new FakeProvider()) {
@@ -290,6 +291,79 @@ describe('createDaemonServer', () => {
     } finally {
       settle?.();
       await pending.catch(() => undefined);
+    }
+  });
+
+  it('keeps timed-out provider work pending until provider settlement', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1_000);
+    let settleProvider: (() => void) | undefined;
+    let providerStarted!: () => void;
+    const providerStartedPromise = new Promise<void>((resolve) => {
+      providerStarted = resolve;
+    });
+    const provider = new FakeProvider();
+    provider.dispatchImpl = (command) => {
+      if (command.id !== 'timed-out') {
+        return Promise.resolve({ id: command.id, ok: true, data: 'done' });
+      }
+      if (provider.commands.filter(({ id }) => id === command.id).length > 1) {
+        return Promise.resolve({ id: command.id, ok: true, data: 'duplicate dispatch' });
+      }
+      providerStarted();
+      return new Promise((resolve) => {
+        settleProvider = () => resolve({ id: command.id, ok: true, data: 'done' });
+      });
+    };
+    const { baseUrl } = await start(provider);
+
+    const firstRequest = postCommand(baseUrl, persistentWrite('timed-out', 'run_100_1_1', { timeout: 1 }));
+    try {
+      await providerStartedPromise;
+      await vi.advanceTimersByTimeAsync(1_000);
+      const timedOut = await firstRequest;
+      expect(timedOut.status).toBe(408);
+      await expect(timedOut.json()).resolves.toMatchObject({
+        id: 'timed-out',
+        ok: false,
+        errorCode: 'command_result_unknown',
+      });
+
+      await vi.advanceTimersByTimeAsync(45_001);
+      const duplicateRequest = postCommand(
+        baseUrl,
+        persistentWrite('timed-out', 'run_100_1_1', { timeout: 120 }),
+      );
+      await vi.advanceTimersByTimeAsync(0);
+      const whileProviderPending = await fetch(`${baseUrl}/status`, { headers: { [DAEMON_HEADER_NAME]: '1' } });
+      await expect(whileProviderPending.json()).resolves.toMatchObject({
+        pending: 1,
+        sessionLeases: [{ command: 'example write', heartbeatAt: 1_000 }],
+      });
+      expect(provider.commands.map((command) => command.id)).toEqual(['timed-out']);
+
+      const conflict = await postCommand(baseUrl, persistentWrite('conflict', 'run_200_2_2'));
+      expect(conflict.status).toBe(409);
+      expect(provider.commands.map((command) => command.id)).toEqual(['timed-out']);
+
+      settleProvider?.();
+      await vi.advanceTimersByTimeAsync(0);
+      const duplicate = await duplicateRequest;
+      expect(duplicate.status).toBe(200);
+      await expect(duplicate.json()).resolves.toMatchObject({ data: 'done' });
+      const afterProviderSettle = await fetch(`${baseUrl}/status`, { headers: { [DAEMON_HEADER_NAME]: '1' } });
+      await expect(afterProviderSettle.json()).resolves.toMatchObject({
+        pending: 0,
+        sessionLeases: [{ command: 'example write', heartbeatAt: 47_001 }],
+      });
+
+      await vi.advanceTimersByTimeAsync(45_001);
+      const reclaimed = await postCommand(baseUrl, persistentWrite('reclaimed', 'run_200_2_2'));
+      expect(reclaimed.status).toBe(200);
+      expect(provider.commands.map((command) => command.id)).toEqual(['timed-out', 'reclaimed']);
+    } finally {
+      settleProvider?.();
+      await firstRequest.catch(() => undefined);
     }
   });
 
