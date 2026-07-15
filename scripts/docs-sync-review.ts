@@ -295,7 +295,7 @@ export async function runDocsSyncReview(
         const documentation = readDocumentation(selectDocumentationPaths(context.files));
         const prompts = buildReviewPrompts(context, documentation);
         const reviews: ReviewResult[] = [];
-        const model = env.GEMINI_DOCS_REVIEW_MODEL?.trim() || 'gemini-2.5-flash';
+        const model = env.GEMINI_DOCS_REVIEW_MODEL?.trim() || 'gemini-3.5-flash';
         for (const [index, prompt] of prompts.entries()) {
           try {
             const raw = await generateReview(prompt.prompt, model, apiKey);
