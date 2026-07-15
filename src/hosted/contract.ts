@@ -18,6 +18,8 @@ export interface FileArgumentContract {
   separator?: ',';
   contentTypes?: string[];
   maxBytes?: number;
+  /** Local destination used when the adapter itself supplies an implicit path. */
+  defaultPath?: string;
 }
 
 export interface HostedFileArgumentContract {
@@ -29,6 +31,7 @@ export interface HostedFileArgumentContract {
   separator?: ',';
   contentTypes?: string[];
   maxBytes?: number;
+  defaultPath?: string;
 }
 
 export interface HostedArgumentContract {
@@ -231,6 +234,7 @@ function normalizeFileArguments(command: HostedContractCommandInput): HostedFile
       ...(arg.file.separator !== undefined ? { separator: arg.file.separator } : {}),
       ...(arg.file.contentTypes?.length ? { contentTypes: [...arg.file.contentTypes] } : {}),
       ...(arg.file.maxBytes !== undefined ? { maxBytes: arg.file.maxBytes } : {}),
+      ...(arg.file.defaultPath !== undefined ? { defaultPath: arg.file.defaultPath } : {}),
     }];
   });
 }

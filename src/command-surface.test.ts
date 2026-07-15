@@ -114,12 +114,9 @@ describe('parseCommandSurface', () => {
     { name: 'an extra positional', argv: ['needle', 'issues', 'extra'], message: /too many arguments.*search/i },
     { name: 'a missing required option value', argv: ['needle', '--label'], message: /--label.*argument missing/i },
     { name: 'an unknown flag', argv: ['needle', '--unknown'], message: /unknown option/i },
-    { name: 'a partial integer', argv: ['needle', '--limit', '12x'], message: /limit.*integer/i },
-    { name: 'a fractional integer', argv: ['needle', '--limit', '1.5'], message: /limit.*integer/i },
-    { name: 'a non-finite number', argv: ['needle', '--ratio', 'Infinity'], message: /ratio.*number/i },
+    { name: 'a partial integer', argv: ['needle', '--limit', '12x'], message: /limit.*number/i },
     { name: 'an invalid choice', argv: ['needle', '--mode', 'merged'], message: /mode.*one of.*open.*closed/i },
     { name: 'an invalid boolean', argv: ['needle', '--enabled=maybe'], message: /enabled.*boolean/i },
-    { name: 'an invalid format', argv: ['needle', '--format', 'xml'], message: /format.*one of/i },
     { name: 'an invalid trace mode', argv: ['needle', '--trace', 'always'], message: /trace.*one of/i },
   ])('rejects $name', ({ argv, message }) => {
     expect(() => parseCommandSurface(metadata, argv)).toThrow(message);
@@ -139,11 +136,22 @@ describe('coerceCommandArguments', () => {
     });
   });
 
-  it('coerces defaults through the same type and choice rules as CLI values', () => {
+  it('preserves adapter-owned defaults without coercing them again', () => {
     expect(coerceCommandArguments([
       { name: 'limit', type: 'int', default: '10' },
       { name: 'mode', choices: ['open', 'closed'], default: 'open' },
-    ], {})).toEqual({ limit: 10, mode: 'open' });
+    ], {})).toEqual({ limit: '10', mode: 'open' });
+  });
+
+  it('preserves legacy numeric and unknown-format coercion', () => {
+    expect(coerceCommandArguments([
+      { name: 'count', type: 'int' },
+      { name: 'ratio', type: 'number' },
+    ], { count: '1.5', ratio: 'Infinity' })).toEqual({ count: 1.5, ratio: Infinity });
+    expect(parseCommandSurface(metadata, ['needle', '--format', 'xml'])).toMatchObject({
+      format: 'xml',
+      formatExplicit: true,
+    });
   });
 });
 

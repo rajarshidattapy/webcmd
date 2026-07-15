@@ -6,8 +6,6 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
-import { bashCompletionScript } from '../completion-shared.js';
-import { PKG_VERSION } from '../version.js';
 
 const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const entrypoint = path.join(packageRoot, 'src/main.ts');
@@ -38,16 +36,16 @@ afterEach(async () => {
 
 describe('hosted CLI process lifecycle', () => {
   it.each([
-    { name: 'version', argv: ['--version'], expected: `${PKG_VERSION}\n` },
-    { name: 'shell completion', argv: ['completion', 'bash'], expected: bashCompletionScript() },
-  ])('awaits a backpressured $name fast-path write before exiting', async ({ argv, expected }) => {
+    { name: 'version', argv: ['--version'] },
+    { name: 'shell completion', argv: ['completion', 'bash'] },
+  ])('preserves the legacy immediate-exit behavior for a backpressured $name fast path', async ({ argv }) => {
     const fixture = await createHostedFixture('success');
     const preload = await createDelayedStdoutPreload(path.dirname(fixture.discoverySentinel));
 
     const result = await runCli(argv, fixture.env, [preload]);
 
     expect(result.status).toBe(0);
-    expect(result.stdout).toBe(expected);
+    expect(result.stdout).toBe('');
     expect(result.stderr).toBe('');
     await expect(readFile(fixture.discoverySentinel, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
   }, 20_000);

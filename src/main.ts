@@ -23,7 +23,6 @@ import { PKG_VERSION } from './version.js';
 import { EXIT_CODES } from './errors.js';
 import { isSupportedNodeVersion, MIN_SUPPORTED_NODE_MAJOR } from './runtime-detect.js';
 import { CONFIG_DIR_NAME } from './brand.js';
-import { writeToStream } from './stream-write.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -52,18 +51,16 @@ if (typeof (globalThis as { Bun?: unknown }).Bun === 'undefined' && !isSupported
 // e.g. `webcmd --version` or `webcmd -V`, but NOT `webcmd gh --version`
 let fastPathHandled = false;
 if (argv[0] === '--version' || argv[0] === '-V') {
-  await writeToStream(process.stdout, PKG_VERSION + '\n');
-  process.exitCode = EXIT_CODES.SUCCESS;
-  fastPathHandled = true;
+  process.stdout.write(PKG_VERSION + '\n');
+  process.exit(EXIT_CODES.SUCCESS);
 }
 
 // Fast path: completion <shell> — print shell script without discovery
 if (!fastPathHandled && argv[0] === 'completion' && argv.length >= 2) {
   const script = getCompletionScriptFast(argv[1]!);
   if (script !== undefined) {
-    await writeToStream(process.stdout, script);
-    process.exitCode = EXIT_CODES.SUCCESS;
-    fastPathHandled = true;
+    process.stdout.write(script);
+    process.exit(EXIT_CODES.SUCCESS);
   }
   // Unknown shell — fall through to full path for proper error handling
 }
@@ -111,9 +108,8 @@ if (getCompIdx !== -1) {
     }
     if (cursor === undefined) cursor = words.length;
     const candidates = getCompletionsFromManifest(words, cursor, manifestPaths);
-    await writeToStream(process.stdout, candidates.join('\n') + '\n');
-    process.exitCode = EXIT_CODES.SUCCESS;
-    return;
+    process.stdout.write(candidates.join('\n') + '\n');
+    process.exit(EXIT_CODES.SUCCESS);
   }
   // No manifest — fall through to full discovery path below
 }
@@ -170,9 +166,8 @@ if (getCompIdx !== -1) {
   }
   if (cursor === undefined) cursor = words.length;
   const candidates = getCompletions(words, cursor);
-  await writeToStream(process.stdout, candidates.join('\n') + '\n');
-  process.exitCode = EXIT_CODES.SUCCESS;
-  return;
+  process.stdout.write(candidates.join('\n') + '\n');
+  process.exit(EXIT_CODES.SUCCESS);
 }
 
 // Rewrite `webcmd browser <session> <subcommand> ...` so commander (which

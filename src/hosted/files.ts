@@ -77,7 +77,7 @@ export async function prepareHostedFiles(input: {
       continue;
     }
 
-    const rawValue = input.args[arg.name] ?? arg.default;
+    const rawValue = input.args[arg.name] ?? arg.default ?? arg.file.defaultPath;
     if (rawValue === undefined || rawValue === null || rawValue === '') continue;
     const values = valuesForFileArg(arg, rawValue);
     const references: HostedArtifactReference[] = [];

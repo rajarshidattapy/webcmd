@@ -56,6 +56,7 @@ const EXPECTED_FILE_ARGUMENTS: Record<string, ExpectedFileArgument[]> = {
     pathKind: 'directory',
     multiple: false,
     required: false,
+    defaultPath: '~/Pictures/chatgpt',
   }],
   'chatgpt/project-file-add': [{
     name: 'file',

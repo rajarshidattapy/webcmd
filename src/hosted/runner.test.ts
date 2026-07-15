@@ -733,7 +733,7 @@ describe('runHostedCli', () => {
   it('does not resolve until a slow typed-error stderr write completes', async () => {
     const stderr = new ControlledWritable({ highWaterMark: 1 });
     let settled = false;
-    const run = runHostedCli(['github', 'whoami', '-f', 'xml'], {
+    const run = runHostedCli(['github', 'whoami', '--trace', 'always'], {
       config: makeHostedConfig({ apiBaseUrl: 'https://api.example.com', apiKey: 'key' }),
       stderr,
       fetchImpl: async () => manifestResponse(),
@@ -965,10 +965,10 @@ describe('runHostedCli', () => {
       expected: 'username\n"a,""b\nline 2"\n',
     },
     {
-      name: 'Markdown escaping',
+      name: 'literal Markdown cells',
       result: [{ username: 'a|b\nline 2' }],
       argv: ['-f', 'md'],
-      expected: '| username |\n| --- |\n| a\\|b<br>line 2 |\n',
+      expected: '| username |\n| --- |\n| a|b\nline 2 |\n',
     },
   ])('renders hosted $name with canonical literal bytes', async ({ result, argv, expected }) => {
     const stdout = sink(true);

@@ -8,7 +8,7 @@ export const TRACE_MODES = ['off', 'on', 'retain-on-failure'] as const;
 const BROWSER_WINDOW_MODES = ['foreground', 'background'] as const;
 const SITE_SESSION_MODES = ['ephemeral', 'persistent'] as const;
 
-export type OutputFormat = typeof OUTPUT_FORMATS[number];
+export type OutputFormat = string;
 export type TraceMode = typeof TRACE_MODES[number];
 
 export interface CommandSurfaceMetadata {
@@ -199,7 +199,7 @@ export function coerceCommandArguments(
   const result: Record<string, unknown> = { ...input };
 
   for (const definition of definitions) {
-    let value = result[definition.name];
+    const value = result[definition.name];
     if (definition.required && (value === undefined || value === null || value === '')) {
       throw new ArgumentError(
         `Argument "${definition.name}" is required.`,
@@ -207,45 +207,39 @@ export function coerceCommandArguments(
       );
     }
 
-    if (value === undefined || value === null) {
-      if (definition.default === undefined) continue;
-      result[definition.name] = definition.default;
-      value = definition.default;
-    }
-
-    if (definition.type === 'int') {
-      const parsed = Number(value);
-      if (!Number.isInteger(parsed)) {
-        throw new ArgumentError(`Argument "${definition.name}" must be a valid integer. Received: "${String(value)}"`);
-      }
-      result[definition.name] = parsed;
-    } else if (definition.type === 'number') {
-      const parsed = Number(value);
-      if (!Number.isFinite(parsed)) {
-        throw new ArgumentError(`Argument "${definition.name}" must be a valid number. Received: "${String(value)}"`);
-      }
-      result[definition.name] = parsed;
-    } else if (definition.type === 'boolean' || definition.type === 'bool') {
-      if (typeof value === 'string') {
-        const normalized = value.toLowerCase();
-        if (normalized === 'true' || normalized === '1') result[definition.name] = true;
-        else if (normalized === 'false' || normalized === '0') result[definition.name] = false;
-        else {
-          throw new ArgumentError(
-            `Argument "${definition.name}" must be a boolean (true/false). Received: "${String(value)}"`,
-          );
+    if (value !== undefined && value !== null) {
+      if (definition.type === 'int' || definition.type === 'number') {
+        const parsed = Number(value);
+        if (Number.isNaN(parsed)) {
+          throw new ArgumentError(`Argument "${definition.name}" must be a valid number. Received: "${String(value)}"`);
         }
-      } else {
-        result[definition.name] = Boolean(value);
+        result[definition.name] = parsed;
+      } else if (definition.type === 'boolean' || definition.type === 'bool') {
+        if (typeof value === 'string') {
+          const normalized = value.toLowerCase();
+          if (normalized === 'true' || normalized === '1') result[definition.name] = true;
+          else if (normalized === 'false' || normalized === '0') result[definition.name] = false;
+          else {
+            throw new ArgumentError(
+              `Argument "${definition.name}" must be a boolean (true/false). Received: "${String(value)}"`,
+            );
+          }
+        } else {
+          result[definition.name] = Boolean(value);
+        }
       }
-    }
 
-    const coercedValue = result[definition.name];
-    if (definition.choices && definition.choices.length > 0
-      && !definition.choices.map(String).includes(String(coercedValue))) {
-      throw new ArgumentError(
-        `Argument "${definition.name}" must be one of: ${definition.choices.join(', ')}. Received: "${String(coercedValue)}"`,
-      );
+      const coercedValue = result[definition.name];
+      if (definition.choices && definition.choices.length > 0
+        && !definition.choices.map(String).includes(String(coercedValue))) {
+        throw new ArgumentError(
+          `Argument "${definition.name}" must be one of: ${definition.choices.join(', ')}. Received: "${String(coercedValue)}"`,
+        );
+      }
+    } else if (definition.default !== undefined) {
+      // Preserve the historical local contract: defaults are adapter-owned
+      // values and are not re-coerced or revalidated by the CLI boundary.
+      result[definition.name] = definition.default;
     }
   }
 
@@ -253,8 +247,9 @@ export function coerceCommandArguments(
 }
 
 export function parseOutputFormat(value: unknown): OutputFormat {
-  if (OUTPUT_FORMATS.includes(value as OutputFormat)) return value as OutputFormat;
-  throw new ArgumentError(`--format must be one of: ${OUTPUT_FORMATS.join(', ')}. Received: "${String(value)}"`);
+  // Preserve the long-standing local behavior: unknown format names flow to
+  // output.ts, whose default switch branch renders a table.
+  return String(value);
 }
 
 function parseTraceMode(value: unknown): TraceMode {

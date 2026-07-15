@@ -11,13 +11,13 @@ import {
   HOSTED_ROOT_HELP,
   LOCAL_ONLY_COMMAND_HELP,
 } from '../completion-shared.js';
-import { ConfigError, EXIT_CODES, toEnvelope } from '../errors.js';
+import { CliError, ConfigError, EXIT_CODES, toEnvelope } from '../errors.js';
 import { getRequestedHelpFormat, renderStructuredHelp } from '../help.js';
 import { findPackageRoot } from '../package-paths.js';
 import { formatErrorEnvelope, render as renderOutput } from '../output.js';
 import { StreamWriteError, writeToStream } from '../stream-write.js';
 import { PKG_VERSION } from '../version.js';
-import { requireCompletionScriptFast } from '../completion-fast.js';
+import { getCompletionScriptFast } from '../completion-fast.js';
 import { browserCommandCatalog } from '../browser/command-catalog.js';
 import { HostedClient, HostedClientError } from './client.js';
 import { parseHostedInvocation } from './args.js';
@@ -93,6 +93,7 @@ export async function runHostedCli(argv: string[], opts: HostedRunnerOptions = {
     return { handled: true, exitCode: EXIT_CODES.SUCCESS };
   } catch (err) {
     if (err instanceof StreamWriteError) throw err;
+    if (err instanceof CliError && err.code === 'UNSUPPORTED_SHELL') throw err;
     if (err instanceof CommanderStructuralError) {
       await writeToStream(stderr, err.output);
       return { handled: true, exitCode: err.exitCode };
@@ -150,11 +151,13 @@ async function dispatchHosted(
       await writeToStream(stdout, parsed.output);
       return;
     }
-    let script: string;
-    try {
-      script = requireCompletionScriptFast(parsed.shell);
-    } catch (error) {
-      throw new CommanderCompatibleError(formatErrorEnvelope(toEnvelope(error)), errorExitCode(error));
+    const script = getCompletionScriptFast(parsed.shell);
+    if (script === undefined) {
+      // Run the canonical local Commander action for this rare error path so
+      // hosted mode preserves even the historical public stack bytes.
+      const { createProgram } = await import('../cli.js');
+      await createProgram('', '').parseAsync(argv, { from: 'user' });
+      throw new CliError('UNSUPPORTED_SHELL', `Unsupported shell: ${parsed.shell}. Supported: bash, zsh, fish`);
     }
     await writeToStream(stdout, script);
     return;

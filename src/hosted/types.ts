@@ -15,6 +15,7 @@ export interface HostedFileArgument {
   contentTypes?: string[];
   contentType?: string;
   maxBytes?: number;
+  defaultPath?: string;
 }
 
 export interface HostedCommand extends CommandSurfaceMetadata {

@@ -3915,13 +3915,13 @@
       {
         "name": "op",
         "type": "str",
-        "default": "~/Pictures/chatgpt",
         "required": false,
         "help": "Output directory (default: ~/Pictures/chatgpt)",
         "file": {
           "direction": "output",
           "pathKind": "directory",
-          "multiple": false
+          "multiple": false,
+          "defaultPath": "~/Pictures/chatgpt"
         }
       },
       {

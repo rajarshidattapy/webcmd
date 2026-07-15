@@ -46,7 +46,7 @@ describe('parseHostedInvocation', () => {
   });
 
   it.each([
-    { name: 'partial integers', argv: ['webcmd', '--limit', '12x'], message: /limit.*integer/i },
+    { name: 'partial integers', argv: ['webcmd', '--limit', '12x'], message: /limit.*number/i },
     { name: 'invalid choices', argv: ['webcmd', '--sort', 'recent'], message: /sort.*one of.*updated.*stars/i },
   ])('rejects $name', ({ argv, message }) => {
     expect(() => parseHostedInvocation(command, argv)).toThrow(message);

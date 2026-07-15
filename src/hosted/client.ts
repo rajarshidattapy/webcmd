@@ -418,18 +418,19 @@ function isHostedManifestArg(value: unknown): boolean {
 }
 
 function isHostedArgFileMetadata(value: unknown): boolean {
-  return hasOnlyKeys(value, ['direction', 'pathKind', 'multiple', 'separator', 'contentTypes', 'contentType', 'maxBytes'])
+  return hasOnlyKeys(value, ['direction', 'pathKind', 'multiple', 'separator', 'contentTypes', 'contentType', 'maxBytes', 'defaultPath'])
     && (value.direction === 'input' || value.direction === 'output')
     && (value.pathKind === 'file' || value.pathKind === 'directory')
     && typeof value.multiple === 'boolean'
     && (value.separator === undefined || value.separator === ',')
     && (value.contentTypes === undefined || (Array.isArray(value.contentTypes) && value.contentTypes.every(item => typeof item === 'string')))
     && (value.contentType === undefined || typeof value.contentType === 'string')
-    && (value.maxBytes === undefined || (typeof value.maxBytes === 'number' && Number.isFinite(value.maxBytes) && value.maxBytes > 0));
+    && (value.maxBytes === undefined || (typeof value.maxBytes === 'number' && Number.isFinite(value.maxBytes) && value.maxBytes > 0))
+    && (value.defaultPath === undefined || typeof value.defaultPath === 'string');
 }
 
 function isHostedFileArgument(value: unknown): boolean {
-  return hasOnlyKeys(value, ['name', 'direction', 'pathKind', 'multiple', 'required', 'separator', 'contentTypes', 'contentType', 'maxBytes'])
+  return hasOnlyKeys(value, ['name', 'direction', 'pathKind', 'multiple', 'required', 'separator', 'contentTypes', 'contentType', 'maxBytes', 'defaultPath'])
     && typeof value.name === 'string'
     && (value.direction === 'input' || value.direction === 'output')
     && (value.pathKind === 'file' || value.pathKind === 'directory')
@@ -438,7 +439,8 @@ function isHostedFileArgument(value: unknown): boolean {
     && (value.separator === undefined || value.separator === ',')
     && (value.contentTypes === undefined || (Array.isArray(value.contentTypes) && value.contentTypes.every(item => typeof item === 'string')))
     && (value.contentType === undefined || typeof value.contentType === 'string')
-    && (value.maxBytes === undefined || (typeof value.maxBytes === 'number' && Number.isFinite(value.maxBytes) && value.maxBytes > 0));
+    && (value.maxBytes === undefined || (typeof value.maxBytes === 'number' && Number.isFinite(value.maxBytes) && value.maxBytes > 0))
+    && (value.defaultPath === undefined || typeof value.defaultPath === 'string');
 }
 
 function isHostedArtifactReceipt(value: unknown): value is HostedArtifactReceipt {

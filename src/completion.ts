@@ -8,7 +8,7 @@
 
 import { getRegistry } from './registry.js';
 import { getCommandCompletionCandidates, toPresentableCommand } from './command-presentation.js';
-import { requireCompletionScriptFast } from './completion-fast.js';
+import { CliError } from './errors.js';
 import {
   BUILTIN_COMMANDS,
   bashCompletionScript,
@@ -39,5 +39,17 @@ export function getCompletions(words: string[], cursor: number): string[] {
  * Print the completion script for the requested shell.
  */
 export function printCompletionScript(shell: string): void {
-  process.stdout.write(requireCompletionScriptFast(shell));
+  switch (shell) {
+    case 'bash':
+      process.stdout.write(bashCompletionScript());
+      break;
+    case 'zsh':
+      process.stdout.write(zshCompletionScript());
+      break;
+    case 'fish':
+      process.stdout.write(fishCompletionScript());
+      break;
+    default:
+      throw new CliError('UNSUPPORTED_SHELL', `Unsupported shell: ${shell}. Supported: bash, zsh, fish`);
+  }
 }

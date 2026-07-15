@@ -160,9 +160,9 @@ function formatMarkdown(data: unknown, opts: RenderOptions): string {
 
   const columns = resolveColumns(rows, opts);
   const output = [
-    `| ${columns.map(escapeMarkdownCell).join(' | ')} |`,
+    `| ${columns.join(' | ')} |`,
     `| ${columns.map(() => '---').join(' | ')} |`,
-    ...rows.map(row => `| ${columns.map(column => escapeMarkdownCell(row[column])).join(' | ')} |`),
+    ...rows.map(row => `| ${columns.map(column => String(row[column] ?? '')).join(' | ')} |`),
   ];
   return `${output.join('\n')}\n`;
 }
@@ -172,17 +172,10 @@ function formatCsv(data: unknown, opts: RenderOptions): string {
   if (!rows.length) return '';
   const columns = resolveColumns(rows, opts);
   const output = [
-    columns.map(csvCell).join(','),
+    columns.join(','),
     ...rows.map(row => columns.map(column => csvCell(row[column])).join(',')),
   ];
   return `${output.join('\n')}\n`;
-}
-
-function escapeMarkdownCell(value: unknown): string {
-  return String(value ?? '')
-    .replace(/\\/g, '\\\\')
-    .replace(/\|/g, '\\|')
-    .replace(/\r\n|\r|\n/g, '<br>');
 }
 
 function csvCell(value: unknown): string {

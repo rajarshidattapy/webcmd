@@ -326,25 +326,17 @@ describe('commanderAdapter default formats', () => {
     );
   });
 
-  it('rejects an invalid explicit format through the shared typed boundary', async () => {
+  it('preserves the legacy fallback for an unknown explicit format', async () => {
     const program = new Command();
     const siteCmd = program.command('gemini');
     registerCommandToProgram(siteCmd, cmd);
-    const stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
-
     await program.parseAsync(['node', 'webcmd', 'gemini', 'ask', '--format', 'xml']);
 
-    expect(mockExecuteCommand).not.toHaveBeenCalled();
-    expect(process.exitCode).toBe(2);
-    expect(stderrSpy.mock.calls.map(call => String(call[0])).join('')).toBe([
-      'ok: false',
-      'error:',
-      '  code: ARGUMENT',
-      '  message: \'--format must be one of: table, plain, json, yaml, yml, md, markdown, csv. Received: "xml"\'',
-      '  exitCode: 2',
-      '',
-    ].join('\n'));
-    stderrSpy.mockRestore();
+    expect(mockExecuteCommand).toHaveBeenCalled();
+    expect(mockRenderOutput).toHaveBeenCalledWith(
+      [{ response: 'hello' }],
+      expect.objectContaining({ fmt: 'xml', fmtExplicit: true }),
+    );
   });
 });
 

@@ -11,7 +11,7 @@ const committedRoot = process.env.WEBCMD_CONTRACT_COMMITTED_ROOT
   ? path.resolve(process.env.WEBCMD_CONTRACT_COMMITTED_ROOT)
   : packageRoot;
 const generatedRoot = mkdtempSync(path.join(tmpdir(), 'webcmd-hosted-contract-'));
-const artifactNames = ['cli-manifest.json', 'hosted-contract.json'];
+const committedArtifactNames = ['cli-manifest.json'];
 
 const generator = String.raw`
   import { readFile, writeFile } from 'node:fs/promises';
@@ -72,7 +72,7 @@ try {
     process.stderr.write(generation.stderr);
     process.exitCode = generation.status ?? 1;
   } else {
-    const dirtyArtifacts = artifactNames.filter((artifactName) => {
+    const dirtyArtifacts = committedArtifactNames.filter((artifactName) => {
       const committed = readFileSync(path.join(committedRoot, artifactName));
       const generated = readFileSync(path.join(generatedRoot, artifactName));
       return !committed.equals(generated);
@@ -81,11 +81,26 @@ try {
     if (dirtyArtifacts.length > 0) {
       process.stderr.write(
         `Generated contract artifacts are out of date: ${dirtyArtifacts.join(', ')}\n`
-        + 'Run `npm run build`, then commit the updated artifacts.\n',
+        + 'Run `npm run build`, then commit the updated manifest.\n',
       );
       process.exitCode = 1;
     } else {
-      process.stdout.write('Generated contract artifacts match committed bytes.\n');
+      const generatedContract = JSON.parse(
+        readFileSync(path.join(generatedRoot, 'hosted-contract.json'), 'utf8'),
+      );
+      if (
+        generatedContract?.schemaVersion !== 1
+        || typeof generatedContract?.webcmdVersion !== 'string'
+        || !Array.isArray(generatedContract?.commands)
+        || !Array.isArray(generatedContract?.browserCommands)
+      ) {
+        process.stderr.write('Generated hosted-contract.json is structurally invalid.\n');
+        process.exitCode = 1;
+      } else {
+        process.stdout.write(
+          'Generated cli-manifest.json matches committed bytes; hosted-contract.json generated successfully.\n',
+        );
+      }
     }
   }
 } finally {

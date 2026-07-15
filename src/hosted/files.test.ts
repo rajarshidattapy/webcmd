@@ -38,11 +38,11 @@ const fileCommand: HostedCommand = {
     },
     {
       name: 'output',
-      default: './downloads',
       file: {
         direction: 'output',
         pathKind: 'directory',
         multiple: false,
+        defaultPath: './downloads',
       },
     },
   ],

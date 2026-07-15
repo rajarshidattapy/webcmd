@@ -237,7 +237,7 @@ export function commandListPresentation(
   format: string,
   options: { externalClis?: readonly PresentableExternalCli[] } = {},
 ): CommandListPresentation {
-  const structured = format === 'json' || format === 'yaml' || format === 'yml';
+  const structured = format === 'json' || format === 'yaml';
   const unique = uniqueCommands(commands);
   return {
     rows: commandListRows(unique, structured),
@@ -331,10 +331,8 @@ export function getCommandCompletionCandidates(
   builtins: readonly string[],
 ): string[] {
   if (cursor <= 1) {
-    return [...new Set([
-      ...builtins,
-      ...commands.map((command) => command.site),
-    ])].sort((a, b) => a.localeCompare(b));
+    const sites = new Set(commands.map((command) => command.site));
+    return [...builtins, ...sites].sort();
   }
 
   const site = words[0];
@@ -344,7 +342,7 @@ export function getCommandCompletionCandidates(
   return [...new Set(commands
     .filter((command) => command.site === site)
     .flatMap((command) => [command.name, ...(command.aliases ?? [])]))]
-    .sort((a, b) => a.localeCompare(b));
+    .sort();
 }
 
 export function formatCommandListTerm(command: PresentableCommand): string {
