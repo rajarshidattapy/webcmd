@@ -20,6 +20,7 @@
  * 130   Interrupted by Ctrl-C           (set by tui.ts SIGINT handler)
  */
 import type { ObservationTraceReceipt } from './observation/events.js';
+import type { SessionLeaseHolder } from './session-lease.js';
 
 // ── Exit code table ──────────────────────────────────────────────────────────
 
@@ -138,6 +139,36 @@ export class TimeoutError extends CliError {
 export class ArgumentError extends CliError {
   constructor(message: string, hint?: string) {
     super('ARGUMENT', message, hint, EXIT_CODES.USAGE_ERROR);
+  }
+}
+
+function formatBusyMessage(holder: SessionLeaseHolder): string {
+  const owner = holder.pid === undefined
+    ? holder.command
+    : `${holder.command} (pid ${holder.pid})`;
+  return `Session is busy: ${owner} is already driving it.`;
+}
+
+function formatBusyHint(holder: SessionLeaseHolder, platform: string): string {
+  if (platform === 'win32') {
+    return holder.pid === undefined
+      ? 'Wait for it to finish, or use Task Manager to stop the owning process if it is stuck.'
+      : `Wait for it to finish, or run \`Stop-Process -Id ${holder.pid}\` in PowerShell if it is stuck.`;
+  }
+  return holder.pid === undefined
+    ? 'Wait for it to finish, or stop the owning process if it is stuck.'
+    : `Wait for it to finish, or run \`kill ${holder.pid}\` if it is stuck.`;
+}
+
+/** A persistent write session is temporarily owned by another logical run. */
+export class SessionBusyError extends CliError {
+  constructor(holder: SessionLeaseHolder, platform: string = process.platform) {
+    super(
+      'SESSION_BUSY',
+      formatBusyMessage(holder),
+      formatBusyHint(holder, platform),
+      EXIT_CODES.TEMPFAIL,
+    );
   }
 }
 

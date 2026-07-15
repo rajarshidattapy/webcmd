@@ -10,9 +10,11 @@ import {
   ArgumentError,
   EmptyResultError,
   selectorError,
+  SessionBusyError,
   attachTraceReceipt,
   toEnvelope,
 } from './errors.js';
+import type { SessionLeaseHolder } from './session-lease.js';
 
 describe('Error type hierarchy', () => {
   it('all error types extend CliError', () => {
@@ -95,6 +97,25 @@ describe('toEnvelope', () => {
     });
   });
 
+  it('serializes SessionBusyError with the public code and temporary-failure exit code', () => {
+    const err = new SessionBusyError({
+      command: 'chatgpt ask',
+      pid: 4242,
+      acquiredAt: 1_000,
+      heartbeatAt: 2_000,
+    });
+
+    expect(toEnvelope(err)).toEqual({
+      ok: false,
+      error: {
+        code: 'SESSION_BUSY',
+        message: expect.stringContaining('chatgpt ask'),
+        help: expect.any(String),
+        exitCode: 75,
+      },
+    });
+  });
+
   it('converts CliError without hint (omits help field)', () => {
     const err = new CommandExecutionError('Something broke');
     const envelope = toEnvelope(err);
@@ -147,5 +168,33 @@ describe('toEnvelope', () => {
       executionId: 'exec_failure',
       artifactsUrl: '/v1/executions/exec_failure/artifacts',
     });
+  });
+});
+
+describe('SessionBusyError platform hints', () => {
+  const holder: SessionLeaseHolder = {
+    command: 'chatgpt ask',
+    pid: 4242,
+    acquiredAt: 1_000,
+    heartbeatAt: 2_000,
+  };
+
+  it('uses PowerShell process guidance on Windows when the holder pid is known', () => {
+    const err = new SessionBusyError(holder, 'win32');
+    expect(err.hint).toContain('Stop-Process -Id 4242');
+    expect(err.hint).not.toContain('kill 4242');
+  });
+
+  it('uses Task Manager guidance on Windows when the holder pid is unavailable', () => {
+    const err = new SessionBusyError({ ...holder, pid: undefined }, 'win32');
+    expect(err.hint).toMatch(/wait/i);
+    expect(err.hint).toContain('Task Manager');
+    expect(err.hint).not.toContain('Stop-Process');
+  });
+
+  it('uses kill guidance on POSIX when the holder pid is known', () => {
+    const err = new SessionBusyError(holder, 'linux');
+    expect(err.hint).toContain('kill 4242');
+    expect(err.hint).not.toContain('Stop-Process');
   });
 });
