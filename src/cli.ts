@@ -10,17 +10,18 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import * as readline from 'node:readline/promises';
 import { fileURLToPath } from 'node:url';
-import { Command, InvalidArgumentError, Option } from 'commander';
+import { Command, Option } from 'commander';
 import { findPackageRoot, getBuiltEntryCandidates } from './package-paths.js';
-import { type CliCommand, fullName, getRegistry, strategyLabel } from './registry.js';
-import { serializeCommand, formatArgSummary } from './serialization.js';
+import { type CliCommand, getRegistry } from './registry.js';
+import { commandListPresentation, toPresentableCommand } from './command-presentation.js';
+import { configureCompletionCommandSurface, configureListCommandSurface } from './builtin-command-surface.js';
 import { render as renderOutput } from './output.js';
 import { PKG_VERSION } from './version.js';
 import { printCompletionScript } from './completion.js';
 import { loadExternalClis, executeExternalCli, installExternalCli, registerExternalCli, isBinaryInstalled, formatExternalCliLabel } from './external.js';
 import { installWebcmdSkill, listWebcmdSkills, updateWebcmdSkill, type WebcmdSkillInstallResult } from './skills.js';
 import { registerAllCommands } from './commanderAdapter.js';
-import { classifyAdapter, formatRootAdapterHelpText, installCommanderNamespaceStructuredHelp, installStructuredHelp, leadingPositionalFromUsage, rootHelpData, type RootAdapterGroups } from './help.js';
+import { buildRootHelpPresentation, classifyAdapter, installCommanderNamespaceStructuredHelp, installRootPresentationHelp, leadingPositionalFromUsage, rootHelpData, type RootAdapterGroups } from './help.js';
 import { EXIT_CODES, getErrorMessage, BrowserConnectError, CliError, ArgumentError } from './errors.js';
 import { TargetError, type TargetErrorCode } from './browser/target-errors.js';
 import { resolveTargetJs, getTextResolvedJs, getValueResolvedJs, getAttributesResolvedJs, selectResolvedJs, isAutocompleteResolvedJs, type ResolveOptions, type TargetMatchLevel } from './browser/target-resolver.js';
@@ -33,6 +34,7 @@ import { parseFilter, shapeMatchesFilter } from './browser/shape-filter.js';
 import { buildHtmlTreeJs, type HtmlTreeResult } from './browser/html-tree.js';
 import { buildExtractHtmlJs, runExtractFromHtml } from './browser/extract.js';
 import { analyzeSite, type PageSignals } from './browser/analyze.js';
+import { browserOptionValueParser } from './browser/command-catalog.js';
 import { registerAuthCommands } from './commands/auth.js';
 import { daemonRestart, daemonStatus, daemonStop } from './commands/daemon.js';
 import { log } from './logger.js';
@@ -44,6 +46,7 @@ import { DEFAULT_BROWSER_CONNECT_TIMEOUT } from './browser/config.js';
 import { CLI_COMMAND } from './brand.js';
 import type { BrowserDownloadWaitResult, IPage, ScreenshotOptions } from './types.js';
 import type { BrowserWindowMode } from './runtime.js';
+import { configureRootCommandSurface } from './root-command-surface.js';
 
 const CLI_FILE = fileURLToPath(import.meta.url);
 const BROWSER_TAB_OPTION_DESCRIPTION = 'Target tab/page identity returned by "browser open", "browser tab new", or "browser tab list"';
@@ -743,17 +746,6 @@ function parsePositiveIntOption(val: string | undefined, label: string, fallback
   return parsed;
 }
 
-function parseScreenshotDim(val: string, label: string): number {
-  if (!/^\d+$/.test(val)) {
-    throw new InvalidArgumentError(`--${label} must be a positive integer (got "${val}")`);
-  }
-  const parsed = parseInt(val, 10);
-  if (parsed <= 0) {
-    throw new InvalidArgumentError(`--${label} must be a positive integer (got "${val}")`);
-  }
-  return parsed;
-}
-
 function applyVerbose(opts: { verbose?: boolean }): void {
   if (opts.verbose) process.env.WEBCMD_VERBOSE = '1';
 }
@@ -778,101 +770,35 @@ export function createProgram(BUILTIN_CLIS: string, USER_CLIS: string): Command 
   // prerequisite for passThroughOptions to forward --help/--version to external binaries
   program
     .name('webcmd')
-    .description('Make any website your CLI. Zero setup. AI-powered.')
-    .version(PKG_VERSION)
-    .option('--profile <name>', 'Chrome profile/context alias for browser runtime commands')
-    .enablePositionalOptions();
+    .description('Make any website your CLI. Zero setup. AI-powered.');
+  configureRootCommandSurface(program);
 
   // ── Built-in: list ────────────────────────────────────────────────────────
 
-  program
-    .command('list')
-    .description('List all available CLI commands')
-    .option('-f, --format <fmt>', 'Output format: table, json, yaml, md, csv', 'table')
+  configureListCommandSurface(program.command('list'))
     .action((opts) => {
-      const registry = getRegistry();
-      const commands = [...new Set(registry.values())].sort((a, b) => fullName(a).localeCompare(fullName(b)));
-      const fmt = opts.format;
-      const isStructured = fmt === 'json' || fmt === 'yaml';
-
-      if (fmt !== 'table') {
-        const rows = isStructured
-          ? commands.map(serializeCommand)
-          : commands.map(c => ({
-              command: fullName(c),
-              site: c.site,
-              name: c.name,
-              aliases: c.aliases?.join(', ') ?? '',
-              description: c.description,
-              access: c.access,
-              strategy: strategyLabel(c),
-              browser: !!c.browser,
-              args: formatArgSummary(c.args),
-            }));
-        renderOutput(rows, {
-          fmt,
-          columns: ['command', 'site', 'name', 'aliases', 'description', 'access', 'strategy', 'browser', 'args',
-                     ...(isStructured ? ['columns', 'domain'] : [])],
-          title: 'webcmd/list',
-          source: 'webcmd list',
-        });
+      const externalClis = opts.format === 'table' ? loadExternalClis() : [];
+      const presentation = commandListPresentation(
+        [...new Set(getRegistry().values())].map(toPresentableCommand),
+        opts.format,
+        {
+          externalClis: externalClis.map((external) => ({
+            label: formatExternalCliLabel(external),
+            installed: isBinaryInstalled(external.binary),
+            ...(external.description ? { description: external.description } : {}),
+          })),
+        },
+      );
+      if (presentation.displayLines) {
+        for (const line of presentation.displayLines) console.log(line);
         return;
       }
-
-      // Table (default) — grouped by adapter kind (app vs site), then by site name.
-      // classifyAdapter() reads the `domain` field: DNS-style domains are sites;
-      // localhost/loopback endpoints and bare app names are apps.
-      const appsBySite = new Map<string, CliCommand[]>();
-      const sitesBySite = new Map<string, CliCommand[]>();
-      for (const cmd of commands) {
-        const target = classifyAdapter(cmd.domain) === 'app' ? appsBySite : sitesBySite;
-        const g = target.get(cmd.site) ?? [];
-        g.push(cmd);
-        target.set(cmd.site, g);
-      }
-
-      const renderSiteGroup = (site: string, cmds: CliCommand[]): void => {
-        console.log(`  ${site}`);
-        for (const cmd of cmds) {
-          const label = strategyLabel(cmd);
-          const tag = label === 'public'
-            ? '[public]'
-            : `[${label}]`;
-          const aliases = cmd.aliases?.length ? ` (aliases: ${cmd.aliases.join(', ')})` : '';
-          console.log(`    ${cmd.name} ${tag}${aliases}${cmd.description ? ` — ${cmd.description}` : ''}`);
-        }
-        console.log();
-      };
-
-      console.log();
-      console.log('  webcmd' + ' — available commands');
-      console.log();
-
-      if (appsBySite.size > 0) {
-        console.log('  App adapters');
-        console.log();
-        for (const [site, cmds] of appsBySite) renderSiteGroup(site, cmds);
-      }
-
-      if (sitesBySite.size > 0) {
-        console.log('  Site adapters');
-        console.log();
-        for (const [site, cmds] of sitesBySite) renderSiteGroup(site, cmds);
-      }
-
-      const externalClis = loadExternalClis();
-      if (externalClis.length > 0) {
-        console.log('  external CLIs');
-        for (const ext of externalClis) {
-          const isInstalled = isBinaryInstalled(ext.binary);
-          const tag = isInstalled ? '[installed]' : '[auto-install]';
-          console.log(`    ${formatExternalCliLabel(ext)} ${tag}${ext.description ? ` — ${ext.description}` : ''}`);
-        }
-        console.log();
-      }
-
-      console.log(`  ${commands.length} built-in commands across ${appsBySite.size} apps + ${sitesBySite.size} sites, ${externalClis.length} external CLIs`);
-      console.log();
+      renderOutput(presentation.rows, {
+        fmt: opts.format,
+        columns: presentation.columns,
+        title: 'webcmd/list',
+        source: 'webcmd list',
+      });
     });
 
   // ── Built-in: validate / verify ───────────────────────────────────────────
@@ -1357,8 +1283,8 @@ Examples:
   addBrowserTabOption(browser.command('screenshot').argument('[path]', 'Save to file (base64 if omitted)'))
     .option('--full-page', 'Capture the full scrollable page, not just the viewport', false)
     .option('--annotate', 'Overlay visible browser state ref labels on the screenshot', false)
-    .option('--width <n>', 'Override viewport width in CSS pixels for this screenshot only', (v: string) => parseScreenshotDim(v, 'width'))
-    .option('--height <n>', 'Override viewport height in CSS pixels for this screenshot only (ignored with --full-page)', (v: string) => parseScreenshotDim(v, 'height'))
+    .option('--width <n>', 'Override viewport width in CSS pixels for this screenshot only', (value: string) => browserOptionValueParser('screenshot', 'width')!(value))
+    .option('--height <n>', 'Override viewport height in CSS pixels for this screenshot only (ignored with --full-page)', (value: string) => browserOptionValueParser('screenshot', 'height')!(value))
     .description('Take screenshot')
     .action(browserAction(async (page, path, opts) => {
       const shotOpts: ScreenshotOptions = {
@@ -3104,11 +3030,8 @@ cli({
       console.log(renderBrowserDoctorReport(report));
     });
 
-  program
-    .command('completion')
-    .description('Output shell completion script')
-    .argument('<shell>', 'Shell type: bash, zsh, or fish')
-    .action((shell) => {
+  configureCompletionCommandSurface(program.command('completion'))
+    .action((shell: string) => {
       printCompletionScript(shell);
     });
 
@@ -3801,7 +3724,11 @@ cli({
     for (const sub of cmd.commands) applyAncestorAwareUsage(sub);
   }
   applyAncestorAwareUsage(browser);
-  installStructuredHelp(program, () => rootHelpData(program, adapterGroups), () => formatRootAdapterHelpText(adapterGroups));
+  installRootPresentationHelp(
+    program,
+    () => rootHelpData(program, adapterGroups),
+    buildRootHelpPresentation(program, adapterGroups),
+  );
 
   // ── Unknown command fallback ──────────────────────────────────────────────
   // Security: do NOT auto-discover and register arbitrary system binaries.

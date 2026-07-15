@@ -6,6 +6,8 @@
  */
 
 import * as fs from 'node:fs';
+import { getCommandCompletionCandidates } from './command-presentation.js';
+import { CliError } from './errors.js';
 import {
   BUILTIN_COMMANDS,
   bashCompletionScript,
@@ -42,35 +44,8 @@ export function hasAllManifests(manifestPaths: string[]): boolean {
  */
 export function getCompletionsFromManifest(words: string[], cursor: number, manifestPaths: string[]): string[] {
   const entries = loadManifestEntries(manifestPaths);
-  if (entries === null) {
-    return [];
-  }
-
-  if (cursor <= 1) {
-    const sites = new Set<string>();
-    for (const entry of entries) {
-      sites.add(entry.site);
-    }
-    return [...BUILTIN_COMMANDS, ...sites].sort();
-  }
-
-  const site = words[0];
-  if (BUILTIN_COMMANDS.includes(site)) {
-    return [];
-  }
-
-  if (cursor === 2) {
-    const subcommands: string[] = [];
-    for (const entry of entries) {
-      if (entry.site === site) {
-        subcommands.push(entry.name);
-        if (entry.aliases?.length) subcommands.push(...entry.aliases);
-      }
-    }
-    return [...new Set(subcommands)].sort();
-  }
-
-  return [];
+  if (entries === null) return [];
+  return getCommandCompletionCandidates(entries, words, cursor, BUILTIN_COMMANDS);
 }
 
 // ── Shell script generators (re-exported from shared, no registry dependency) ───────
@@ -81,14 +56,18 @@ const SHELL_SCRIPTS: Record<string, () => string> = {
   fish: fishCompletionScript,
 };
 
-/**
- * Print completion script for the given shell. Returns true if handled, false if unknown shell.
- */
-export function printCompletionScriptFast(shell: string): boolean {
-  const gen = SHELL_SCRIPTS[shell];
-  if (!gen) return false;
-  process.stdout.write(gen());
-  return true;
+/** Return a generated shell script without taking ownership of stdout. */
+export function getCompletionScriptFast(shell: string): string | undefined {
+  return SHELL_SCRIPTS[shell]?.();
+}
+
+/** Return a supported shell script or the canonical local completion error. */
+export function requireCompletionScriptFast(shell: string): string {
+  const script = getCompletionScriptFast(shell);
+  if (script === undefined) {
+    throw new CliError('UNSUPPORTED_SHELL', `Unsupported shell: ${shell}. Supported: bash, zsh, fish`);
+  }
+  return script;
 }
 
 function loadManifestEntries(manifestPaths: string[]): ManifestCompletionEntry[] | null {

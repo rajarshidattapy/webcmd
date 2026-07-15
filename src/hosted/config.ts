@@ -2,6 +2,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { CONFIG_DIR_NAME, ENV_PREFIX } from '../brand.js';
+import type { HostedCredentialBackend } from './credentials.js';
 
 export interface HostedManifestCache {
   fetchedAt: string;
@@ -18,7 +19,9 @@ export type WebcmdConfig =
       updatedAt: string;
       hosted: {
         apiBaseUrl: string;
-        apiKey: string;
+        apiKey?: string;
+        apiKeyRef?: string;
+        credentialBackend?: HostedCredentialBackend;
         manifestCache?: HostedManifestCache;
       };
     };
@@ -52,14 +55,17 @@ function parseConfig(raw: string): WebcmdConfig {
     parsed.mode === 'hosted'
     && typeof parsed.updatedAt === 'string'
     && typeof parsed.hosted?.apiBaseUrl === 'string'
-    && typeof parsed.hosted?.apiKey === 'string'
+    && (typeof parsed.hosted?.apiKey === 'string' || typeof parsed.hosted?.apiKeyRef === 'string')
   ) {
+    const credentialBackend = readCredentialBackend(parsed.hosted.credentialBackend);
     return {
       mode: 'hosted',
       updatedAt: parsed.updatedAt,
       hosted: {
         apiBaseUrl: parsed.hosted.apiBaseUrl,
-        apiKey: parsed.hosted.apiKey,
+        ...(typeof parsed.hosted.apiKey === 'string' ? { apiKey: parsed.hosted.apiKey } : {}),
+        ...(typeof parsed.hosted.apiKeyRef === 'string' ? { apiKeyRef: parsed.hosted.apiKeyRef } : {}),
+        ...(credentialBackend ? { credentialBackend } : {}),
         ...(parsed.hosted.manifestCache ? { manifestCache: parsed.hosted.manifestCache } : {}),
       },
     };
@@ -82,7 +88,7 @@ export function saveWebcmdConfig(config: WebcmdConfig, io: ConfigIo = {}): void 
   const chmodSync = io.chmodSync ?? fs.chmodSync;
   const target = getConfigPath(io);
   mkdirSync(path.dirname(target), { recursive: true });
-  writeFileSync(target, `${JSON.stringify(config, null, 2)}\n`, { encoding: 'utf-8', mode: 0o600 });
+  writeFileSync(target, `${JSON.stringify(persistableConfig(config), null, 2)}\n`, { encoding: 'utf-8', mode: 0o600 });
   try {
     chmodSync(target, 0o600);
   } catch {
@@ -102,7 +108,9 @@ export function makeLocalConfig(now: Date = new Date()): LocalWebcmdConfig {
 
 export function makeHostedConfig(input: {
   apiBaseUrl: string;
-  apiKey: string;
+  apiKey?: string;
+  apiKeyRef?: string;
+  credentialBackend?: HostedCredentialBackend;
   manifestCache?: HostedManifestCache;
   now?: Date;
 }): HostedWebcmdConfig {
@@ -111,7 +119,9 @@ export function makeHostedConfig(input: {
     updatedAt: (input.now ?? new Date()).toISOString(),
     hosted: {
       apiBaseUrl: normalizeApiBaseUrl(input.apiBaseUrl),
-      apiKey: input.apiKey.trim(),
+      ...(input.apiKey !== undefined ? { apiKey: input.apiKey.trim() } : {}),
+      ...(input.apiKeyRef !== undefined ? { apiKeyRef: input.apiKeyRef } : {}),
+      ...(input.credentialBackend !== undefined ? { credentialBackend: input.credentialBackend } : {}),
       ...(input.manifestCache ? { manifestCache: input.manifestCache } : {}),
     },
   };
@@ -137,4 +147,22 @@ export function isHostedConfig(config: WebcmdConfig): config is Extract<WebcmdCo
 
 export function shouldUseHostedMode(io: ConfigIo = {}): boolean {
   return isHostedConfig(loadWebcmdConfig(io));
+}
+
+function readCredentialBackend(value: unknown): HostedCredentialBackend | undefined {
+  return value === 'os' || value === 'file-fallback' ? value : undefined;
+}
+
+function persistableConfig(config: WebcmdConfig): WebcmdConfig {
+  if (config.mode !== 'hosted' || !config.hosted.apiKeyRef) return config;
+  return {
+    mode: 'hosted',
+    updatedAt: config.updatedAt,
+    hosted: {
+      apiBaseUrl: config.hosted.apiBaseUrl,
+      apiKeyRef: config.hosted.apiKeyRef,
+      ...(config.hosted.credentialBackend ? { credentialBackend: config.hosted.credentialBackend } : {}),
+      ...(config.hosted.manifestCache ? { manifestCache: config.hosted.manifestCache } : {}),
+    },
+  };
 }

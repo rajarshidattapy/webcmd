@@ -58,7 +58,17 @@ export class CliError extends Error {
 
 const TRACE_RECEIPT_SYMBOL = Symbol.for('webcmd.traceReceipt');
 
-export function attachTraceReceipt(err: unknown, receipt: ObservationTraceReceipt): void {
+export interface HostedTraceReceipt {
+  receipt: string;
+  executionId: string;
+  artifactsUrl?: string;
+  liveViewUrl?: string;
+  replayUrl?: string;
+}
+
+type TraceReceipt = ObservationTraceReceipt | HostedTraceReceipt;
+
+export function attachTraceReceipt(err: unknown, receipt: TraceReceipt): void {
   if (!err || (typeof err !== 'object' && typeof err !== 'function')) return;
   try {
     Object.defineProperty(err, TRACE_RECEIPT_SYMBOL, {
@@ -72,9 +82,9 @@ export function attachTraceReceipt(err: unknown, receipt: ObservationTraceReceip
   }
 }
 
-export function getTraceReceipt(err: unknown): ObservationTraceReceipt | undefined {
+export function getTraceReceipt(err: unknown): TraceReceipt | undefined {
   if (!err || (typeof err !== 'object' && typeof err !== 'function')) return undefined;
-  return (err as Record<PropertyKey, unknown>)[TRACE_RECEIPT_SYMBOL] as ObservationTraceReceipt | undefined;
+  return (err as Record<PropertyKey, unknown>)[TRACE_RECEIPT_SYMBOL] as TraceReceipt | undefined;
 }
 
 // ── Typed subclasses ─────────────────────────────────────────────────────────
@@ -214,7 +224,7 @@ export interface ErrorEnvelope {
     summaryPath: string;
     receiptPath: string;
     status: ObservationTraceReceipt['status'];
-  };
+  } | HostedTraceReceipt;
 }
 
 // ── Utilities ───────────────────────────────────────────────────────────────
@@ -239,13 +249,17 @@ function serializeCause(cause: unknown, depth: number = 0): string {
 export function toEnvelope(err: unknown): ErrorEnvelope {
   const cause = err instanceof Error && err.cause ? serializeCause(err.cause) : undefined;
   const traceReceipt = getTraceReceipt(err);
-  const trace = traceReceipt ? {
-    traceId: traceReceipt.traceId,
-    dir: traceReceipt.traceDir,
-    summaryPath: traceReceipt.summaryPath,
-    receiptPath: traceReceipt.receiptPath,
-    status: traceReceipt.status,
-  } : undefined;
+  const trace = traceReceipt
+    ? 'receipt' in traceReceipt
+      ? traceReceipt
+      : {
+          traceId: traceReceipt.traceId,
+          dir: traceReceipt.traceDir,
+          summaryPath: traceReceipt.summaryPath,
+          receiptPath: traceReceipt.receiptPath,
+          status: traceReceipt.status,
+        }
+    : undefined;
   if (err instanceof CliError) {
     return {
       ok: false,

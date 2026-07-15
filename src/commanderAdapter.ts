@@ -12,10 +12,10 @@
 
 import { Command } from 'commander';
 import { log } from './logger.js';
-import yaml from 'js-yaml';
 import { type CliCommand, fullName, getRegistry } from './registry.js';
-import { render as renderOutput } from './output.js';
+import { formatErrorEnvelope, render as renderOutput } from './output.js';
 import { executeCommand, prepareCommandArgs } from './execution.js';
+import { configureCommandSurface, parseOutputFormat } from './command-surface.js';
 import {
   commandHelpData,
   formatCommandHelpText,
@@ -36,37 +36,23 @@ import {
 /**
  * Register a single CliCommand as a Commander subcommand.
  */
-export function registerCommandToProgram(siteCmd: Command, cmd: CliCommand): void {
+export interface CommanderAdapterRuntime {
+  stdout?: NodeJS.WritableStream;
+  now?: () => number;
+}
+
+export function registerCommandToProgram(
+  siteCmd: Command,
+  cmd: CliCommand,
+  runtime: CommanderAdapterRuntime = {},
+): void {
   if (siteCmd.commands.some((c: Command) => c.name() === cmd.name)) return;
 
   const subCmd = siteCmd.command(cmd.name).description(formatSiteCommandDescription(cmd));
   if (cmd.aliases?.length) subCmd.aliases(cmd.aliases);
 
-  // Register positional args first, then named options
-  const positionalArgs: typeof cmd.args = [];
-  for (const arg of cmd.args) {
-    if (arg.positional) {
-      const bracket = arg.required ? `<${arg.name}>` : `[${arg.name}]`;
-      subCmd.argument(bracket, arg.help ?? '');
-      positionalArgs.push(arg);
-    } else {
-      const expectsValue = arg.required || arg.valueRequired;
-      const flag = expectsValue ? `--${arg.name} <value>` : `--${arg.name} [value]`;
-      if (arg.required) subCmd.requiredOption(flag, arg.help ?? '');
-      else if (arg.default != null) subCmd.option(flag, arg.help ?? '', String(arg.default));
-      else subCmd.option(flag, arg.help ?? '');
-    }
-  }
-  subCmd
-    .option('-f, --format <fmt>', 'Output format: table, plain, json, yaml, md, csv', 'table')
-    .option('--trace <mode>', 'Trace capture: off, on, retain-on-failure', 'off')
-    .option('-v, --verbose', 'Debug output', false);
-  if (cmd.browser) {
-    subCmd
-      .option('--window <mode>', 'Browser window mode: foreground or background')
-      .option('--site-session <mode>', 'Adapter site session lifecycle: ephemeral or persistent')
-      .option('--keep-tab <bool>', 'Keep the browser tab lease after the command finishes');
-  }
+  const positionalArgs = cmd.args.filter((arg) => arg.positional);
+  configureCommandSurface(subCmd, cmd);
 
   const originalHelpInformation = subCmd.helpInformation.bind(subCmd);
   subCmd.helpInformation = ((contextOptions?: unknown) => {
@@ -81,7 +67,8 @@ export function registerCommandToProgram(siteCmd: Command, cmd: CliCommand): voi
   subCmd.action(async (...actionArgs: unknown[]) => {
     const actionOpts = actionArgs[positionalArgs.length] ?? {};
     const optionsRecord = typeof actionOpts === 'object' && actionOpts !== null ? actionOpts as Record<string, unknown> : {};
-    const startTime = Date.now();
+    const now = runtime.now ?? Date.now;
+    const startTime = now();
 
     // ── Execute + render ────────────────────────────────────────────────
     try {
@@ -110,7 +97,7 @@ export function registerCommandToProgram(siteCmd: Command, cmd: CliCommand): voi
       const kwargs = prepareCommandArgs(cmd, rawKwargs);
 
       const verbose = optionsRecord.verbose === true;
-      let format = typeof optionsRecord.format === 'string' ? optionsRecord.format : 'table';
+      let format = parseOutputFormat(optionsRecord.format ?? 'table');
       const formatExplicit = subCmd.getOptionValueSource('format') === 'cli';
       if (verbose) process.env.WEBCMD_VERBOSE = '1';
       const globals = typeof subCmd.optsWithGlobals === 'function' ? subCmd.optsWithGlobals() as Record<string, unknown> : {};
@@ -134,14 +121,15 @@ export function registerCommandToProgram(siteCmd: Command, cmd: CliCommand): voi
       if (verbose && (!result || (Array.isArray(result) && result.length === 0))) {
         log.warn('Command returned an empty result.');
       }
-      renderOutput(result, {
+      await renderOutput(result, {
         fmt: format,
         fmtExplicit: formatExplicit,
         columns: resolved.columns,
         title: `${resolved.site}/${resolved.name}`,
-        elapsed: (Date.now() - startTime) / 1000,
+        elapsed: (now() - startTime) / 1000,
         source: fullName(resolved),
         footerExtra: resolved.footerExtra?.(kwargs),
+        ...(runtime.stdout ? { stdout: runtime.stdout } : {}),
       });
     } catch (err) {
       renderError(err, fullName(cmd), optionsRecord.verbose === true, optionsRecord.trace);
@@ -159,15 +147,6 @@ function resolveExitCode(err: unknown): number {
 
 // ── Error rendering ─────────────────────────────────────────────────────────
 
-/** Emit AutoFix hint for repairable adapter errors (skipped if trace already exported). */
-function emitAutoFixHint(envelope: string, cmdName: string, traceMode: unknown): string {
-  if (traceMode === 'on' || traceMode === 'retain-on-failure') return envelope;
-  const runnable = cmdName.replace('/', ' ');
-  return envelope
-    + `# AutoFix: re-run with --trace=retain-on-failure for trace artifact\n`
-    + `# webcmd ${runnable} --trace retain-on-failure\n`;
-}
-
 function renderError(err: unknown, cmdName: string, verbose: boolean, traceMode?: unknown): void {
   const envelope = toEnvelope(err);
 
@@ -176,15 +155,7 @@ function renderError(err: unknown, cmdName: string, verbose: boolean, traceMode?
     envelope.error.stack = err.stack;
   }
 
-  let output = yaml.dump(envelope, { sortKeys: false, lineWidth: 120, noRefs: true });
-
-  // Append AutoFix hint for repairable errors
-  const code = envelope.error.code;
-  if (code === 'SELECTOR' || code === 'EMPTY_RESULT' || code === 'ADAPTER_LOAD' || code === 'UNKNOWN') {
-    output = emitAutoFixHint(output, cmdName, traceMode);
-  }
-
-  process.stderr.write(output);
+  process.stderr.write(formatErrorEnvelope(envelope, { cmdName, traceMode }));
 }
 
 /**

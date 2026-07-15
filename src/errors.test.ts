@@ -10,6 +10,7 @@ import {
   ArgumentError,
   EmptyResultError,
   selectorError,
+  attachTraceReceipt,
   toEnvelope,
 } from './errors.js';
 
@@ -131,5 +132,20 @@ describe('toEnvelope', () => {
     const causeStr = envelope.error.cause ?? '';
     expect(causeStr).toContain('(cause chain truncated)');
     expect(causeStr).not.toContain('root'); // root is beyond depth 10
+  });
+
+  it('preserves public hosted trace receipts without inventing local paths', () => {
+    const err = new AuthRequiredError('github.com');
+    attachTraceReceipt(err, {
+      receipt: 'trace_receipt',
+      executionId: 'exec_failure',
+      artifactsUrl: '/v1/executions/exec_failure/artifacts',
+    });
+
+    expect(toEnvelope(err).trace).toEqual({
+      receipt: 'trace_receipt',
+      executionId: 'exec_failure',
+      artifactsUrl: '/v1/executions/exec_failure/artifacts',
+    });
   });
 });

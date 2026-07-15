@@ -16,9 +16,13 @@ vi.mock('./execution.js', async () => {
   };
 });
 
-vi.mock('./output.js', () => ({
-  render: mockRenderOutput,
-}));
+vi.mock('./output.js', async () => {
+  const actual = await vi.importActual<typeof import('./output.js')>('./output.js');
+  return {
+    ...actual,
+    render: mockRenderOutput,
+  };
+});
 
 import { registerCommandToProgram } from './commanderAdapter.js';
 
@@ -319,6 +323,19 @@ describe('commanderAdapter default formats', () => {
     expect(mockRenderOutput).toHaveBeenCalledWith(
       [{ response: 'hello' }],
       expect.objectContaining({ fmt: 'json' }),
+    );
+  });
+
+  it('preserves the legacy fallback for an unknown explicit format', async () => {
+    const program = new Command();
+    const siteCmd = program.command('gemini');
+    registerCommandToProgram(siteCmd, cmd);
+    await program.parseAsync(['node', 'webcmd', 'gemini', 'ask', '--format', 'xml']);
+
+    expect(mockExecuteCommand).toHaveBeenCalled();
+    expect(mockRenderOutput).toHaveBeenCalledWith(
+      [{ response: 'hello' }],
+      expect.objectContaining({ fmt: 'xml', fmtExplicit: true }),
     );
   });
 });
