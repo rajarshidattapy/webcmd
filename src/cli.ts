@@ -19,7 +19,7 @@ import { render as renderOutput } from './output.js';
 import { PKG_VERSION } from './version.js';
 import { printCompletionScript } from './completion.js';
 import { loadExternalClis, executeExternalCli, installExternalCli, registerExternalCli, isBinaryInstalled, formatExternalCliLabel } from './external.js';
-import { installWebcmdSkill, listWebcmdSkills, updateWebcmdSkill, type WebcmdSkillInstallResult } from './skills.js';
+import { installWebcmdSkill, listWebcmdSkills, removeWebcmdSkills, updateWebcmdSkill, type WebcmdSkillInstallResult } from './skills.js';
 import { registerAllCommands } from './commanderAdapter.js';
 import { buildRootHelpPresentation, classifyAdapter, installCommanderNamespaceStructuredHelp, installRootPresentationHelp, leadingPositionalFromUsage, rootHelpData, type RootAdapterGroups } from './help.js';
 import { EXIT_CODES, getErrorMessage, BrowserConnectError, CliError, ArgumentError } from './errors.js';
@@ -150,6 +150,22 @@ async function handleSkillLinkCommand(action: () => WebcmdSkillInstallResult | P
     for (const skill of result.skills) {
       console.log(`${skill.name}: ${skill.destination ? `${skill.destination} -> ` : ''}${skill.stableLink}`);
     }
+  } catch (err) {
+    console.error(`Error: ${getErrorMessage(err)}`);
+    if (err instanceof CliError && err.hint) console.error(`Hint: ${err.hint}`);
+    process.exitCode = err instanceof CliError ? err.exitCode : EXIT_CODES.GENERIC_ERROR;
+  }
+}
+
+function handleSkillRemoveCommand(customPath: string | undefined, json: boolean): void {
+  try {
+    const result = removeWebcmdSkills({ customPath });
+    if (json) {
+      console.log(JSON.stringify(result, null, 2));
+      return;
+    }
+    console.log(`Webcmd skill links removed: ${result.removed.length}`);
+    for (const linkPath of result.removed) console.log(linkPath);
   } catch (err) {
     console.error(`Error: ${getErrorMessage(err)}`);
     if (err instanceof CliError && err.hint) console.error(`Hint: ${err.hint}`);
@@ -826,7 +842,7 @@ export function createProgram(BUILTIN_CLIS: string, USER_CLIS: string): Command 
 
   const skillsCmd = program
     .command('skills')
-    .description('List, install, and update bundled Webcmd skills')
+    .description('List, add, update, and remove bundled Webcmd skills')
     .action(() => {
       const rows = listWebcmdSkills();
       renderOutput(rows, {
@@ -854,8 +870,9 @@ export function createProgram(BUILTIN_CLIS: string, USER_CLIS: string): Command 
     });
 
   skillsCmd
-    .command('install')
-    .description('Install bundled Webcmd skills into an agent skills folder')
+    .command('add')
+    .alias('install')
+    .description('Add bundled Webcmd skills to an agent skills folder')
     .option('-p, --provider <provider>', 'Agent provider: agents, codex, claude')
     .option('-s, --scope <scope>', 'Install scope: user/global or project/local')
     .option('--path <path>', 'Custom agent skills directory')
@@ -888,6 +905,13 @@ export function createProgram(BUILTIN_CLIS: string, USER_CLIS: string): Command 
         customPath: opts.path,
       }), opts.json, 'updated');
     });
+
+  skillsCmd
+    .command('remove')
+    .description('Remove bundled Webcmd skill symlinks from supported locations')
+    .option('--path <path>', 'Also remove links from a custom agent skills directory')
+    .option('--json', 'Output a JSON envelope', false)
+    .action((opts) => handleSkillRemoveCommand(opts.path, opts.json));
 
   const authCmd = registerAuthCommands(program);
 

@@ -133,10 +133,12 @@ Webcmd is designed to be driven by coding agents such as Codex, Claude Code, Cur
 Install Webcmd skills into your agent environment:
 
 ```bash
-webcmd skills install
+webcmd skills add
 ```
 
 The installer asks whether to install globally or locally, then asks for the coding agent (`agents`, `codex`, `claude`) or a custom skills path. For scripts, pass flags such as `--scope project --provider codex` or `--path ./my-skills`.
+
+Remove Webcmd skill symlinks from all supported global and current-project locations with `webcmd skills remove`. Pass `--path ./my-skills` to include a custom directory. The previous `webcmd skills install` command remains available as an alias for `add`.
 
 ### Which skill to use
 

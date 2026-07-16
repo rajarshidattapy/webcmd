@@ -83,10 +83,12 @@ Use the Webcmd adapter-author skill to create this command. If the site changes 
 Install the bundled Webcmd skills and answer the prompts for global/local scope and agent target.
 
 ```bash
-webcmd skills install
+webcmd skills add
 ```
 
 For automation, pass `--scope`, `--provider`, or `--path`.
+
+Run `webcmd skills remove` to remove the bundled skill symlinks from supported global and current-project locations. Pass `--path` to include a custom directory; `webcmd skills install` remains an alias for `add`.
 
 ```text
 Before working on this site, load the Webcmd usage and adapter-author skills. Prefer an existing adapter if one exists.
