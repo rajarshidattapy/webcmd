@@ -106,11 +106,11 @@ describe('hosted CLI process lifecycle', () => {
     await expect(readFile(fixture.discoverySentinel, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
   }, 20_000);
 
-  it('runs skills install locally without contacting Cloud when hosted mode is configured', async () => {
+  it('runs skills add locally without contacting Cloud when hosted mode is configured', async () => {
     const fixture = await createHostedFixture('success');
     const installDir = path.join(fixture.root, 'agent-skills');
 
-    const result = await runCli(['skills', 'install', '--path', installDir, '--json'], fixture.env);
+    const result = await runCli(['skills', 'add', '--path', installDir, '--json'], fixture.env);
 
     expect(result.status).toBe(0);
     expect(result.stderr).toBe('');
