@@ -408,7 +408,7 @@ describe('documentation sync workflow', () => {
       expect(workflow).toContain(event);
     }
     expect(workflow).toContain('contents: read');
-    expect(workflow).toContain('pull-requests: read');
+    expect(workflow).toContain('pull-requests: write');
     expect(workflow).toContain('issues: write');
     expect(workflow).toContain('ref: ${{ github.event.repository.default_branch }}');
     expect(workflow).toContain('GH_TOKEN: ${{ github.token }}');
