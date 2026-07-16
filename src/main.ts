@@ -18,7 +18,6 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { getCompletionScriptFast, getCompletionsFromManifest, hasAllManifests } from './completion-fast.js';
-import { HOSTED_ROOT_HELP } from './completion-shared.js';
 import { findPackageRoot, getCliManifestPath } from './package-paths.js';
 import { PKG_VERSION } from './version.js';
 import { EXIT_CODES } from './errors.js';
@@ -31,9 +30,6 @@ const __dirname = path.dirname(__filename);
 // Use findPackageRoot so the path works both in dev (src/main.ts) and prod (dist/src/main.js).
 const BUILTIN_CLIS = path.join(findPackageRoot(__filename), 'clis');
 const USER_CLIS = path.join(os.homedir(), CONFIG_DIR_NAME, 'clis');
-// Derived from the canonical list (also drives hosted help text and
-// hosted/runner.ts's rejection path) so the two never drift apart.
-const HOSTED_LOCAL_COMMANDS = new Set((HOSTED_ROOT_HELP.localOnlyCommands ?? []).map(command => command.name));
 
 // ── Ultra-fast path: lightweight commands bypass full discovery ──────────
 // These are high-frequency or trivial paths that must not pay the startup tax.
@@ -77,25 +73,18 @@ if (!fastPathHandled) {
   if (argv[0] === 'setup') {
     const { runHostedSetup } = await import('./hosted/setup.js');
     process.exitCode = await runHostedSetup();
+  } else if (argv[0] === 'skills') {
+    const { createProgram } = await import('./cli.js');
+    await createProgram(BUILTIN_CLIS, USER_CLIS).parseAsync(argv, { from: 'user' });
   } else {
     const { shouldUseHostedMode } = await import('./hosted/config.js');
-    if (shouldUseHostedMode() && !(await shouldRunLocalCommandInHostedMode(argv))) {
+    if (shouldUseHostedMode()) {
       const { runHostedCli } = await import('./hosted/runner.js');
       const result = await runHostedCli(argv);
       process.exitCode = result.exitCode;
     } else {
       await runLocalMain();
     }
-  }
-}
-
-async function shouldRunLocalCommandInHostedMode(input: readonly string[]): Promise<boolean> {
-  try {
-    const { parseHostedRootCommandSurface } = await import('./root-command-surface.js');
-    const parsed = parseHostedRootCommandSurface(input);
-    return parsed.kind === 'dispatch' && HOSTED_LOCAL_COMMANDS.has(parsed.argv[0]!);
-  } catch {
-    return false;
   }
 }
 

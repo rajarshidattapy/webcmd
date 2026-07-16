@@ -27,6 +27,19 @@ const command = {
   defaultFormat: 'plain',
 };
 
+const authCommand = {
+  site: 'auth',
+  name: 'status',
+  command: 'auth/status',
+  description: 'Show hosted login status',
+  access: 'read',
+  strategy: 'PUBLIC',
+  browser: false,
+  args: [],
+  columns: ['value'],
+  defaultFormat: 'plain',
+};
+
 afterEach(async () => {
   await Promise.all(servers.splice(0).map(server => new Promise<void>((resolve, reject) => {
     server.close(error => error ? reject(error) : resolve());
@@ -116,8 +129,30 @@ describe('hosted CLI process lifecycle', () => {
     expect(body.skills.every(skill => skill.destination?.startsWith(installDir))).toBe(true);
     await expect(readFile(path.join(installDir, 'webcmd-usage', 'SKILL.md'), 'utf8'))
       .resolves.toContain('webcmd-usage');
-    await expect(readFile(fixture.discoverySentinel, 'utf8')).resolves.toBe('read');
+    await expect(readFile(fixture.discoverySentinel, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
     expect(fixture.requests).toEqual([]);
+  }, 20_000);
+
+  it('keeps hosted auth on Cloud without local discovery', async () => {
+    const fixture = await createHostedFixture('success');
+
+    const result = await runCli(['auth', 'status', '-f', 'plain'], fixture.env);
+
+    expect(result.stderr).toBe('');
+    expect(result.status).toBe(0);
+    expect(fixture.requests).toEqual(['GET /v1/manifest', 'POST /v1/execute']);
+    await expect(readFile(fixture.discoverySentinel, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
+  }, 20_000);
+
+  it('rejects daemon commands in hosted mode without local discovery', async () => {
+    const fixture = await createHostedFixture('success');
+
+    const result = await runCli(['daemon', 'status'], fixture.env);
+
+    expect(result.status).toBe(78);
+    expect(result.stderr).toContain('Hosted mode has no local daemon.');
+    expect(fixture.requests).toEqual([]);
+    await expect(readFile(fixture.discoverySentinel, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
   }, 20_000);
 });
 
@@ -142,7 +177,7 @@ async function createHostedFixture(outcome: 'success' | 'failure'): Promise<{
     '',
   ].join('\n'));
 
-  const server = createServer((request, response) => {
+  const server = createServer(async (request, response) => {
     requests.push(`${request.method ?? 'GET'} ${request.url ?? '/'}`);
     if (request.url === '/v1/manifest') {
       sendChunkedJson(response, {
@@ -154,12 +189,15 @@ async function createHostedFixture(outcome: 'success' | 'failure'): Promise<{
             webcmdPackageVersion: '0.3.0',
             generatedAt: '2026-07-14T00:00:00.000Z',
           },
-          commands: [command],
+          commands: [command, authCommand],
         },
       });
       return;
     }
     if (request.url === '/v1/execute' && request.method === 'POST') {
+      let requestBody = '';
+      for await (const chunk of request) requestBody += chunk;
+      const invocation = JSON.parse(requestBody) as { command: string; trace?: string };
       if (outcome === 'failure') {
         sendChunkedJson(response, {
           ok: false,
@@ -169,7 +207,7 @@ async function createHostedFixture(outcome: 'success' | 'failure'): Promise<{
             help: 'Retry the lifecycle fixture.',
             exitCode: 69,
           },
-          execution: { id: 'exec_lifecycle', command: command.command, status: 'failed' },
+          execution: { id: 'exec_lifecycle', command: invocation.command, status: 'failed' },
         }, 422);
         return;
       }
@@ -177,8 +215,10 @@ async function createHostedFixture(outcome: 'success' | 'failure'): Promise<{
         ok: true,
         result: { value: largeOutput },
         columns: ['value'],
-        execution: { id: 'exec_lifecycle', command: command.command, status: 'succeeded' },
-        trace: { executionId: 'exec_lifecycle', receipt: traceReceipt },
+        execution: { id: 'exec_lifecycle', command: invocation.command, status: 'succeeded' },
+        ...(invocation.trace === 'on'
+          ? { trace: { executionId: 'exec_lifecycle', receipt: traceReceipt } }
+          : {}),
       });
       return;
     }
