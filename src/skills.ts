@@ -37,6 +37,10 @@ export interface WebcmdSkillInstallResult {
   skills: WebcmdSkillLink[];
 }
 
+export interface WebcmdSkillRemoveResult {
+  removed: string[];
+}
+
 interface SkillFrontmatter {
   name?: unknown;
   description?: unknown;
@@ -88,6 +92,36 @@ export function updateWebcmdSkill(options: WebcmdSkillInstallOptions = {}): Webc
       return { ...skill, destination };
     }),
   };
+}
+
+export function removeWebcmdSkills(options: WebcmdSkillInstallOptions = {}): WebcmdSkillRemoveResult {
+  const homeDir = options.homeDir ?? os.homedir();
+  const cwd = options.cwd ?? process.cwd();
+  const roots = new Set([
+    ...['.agents', '.codex', '.claude'].flatMap((dir) => [
+      path.join(homeDir, dir, 'skills'),
+      path.join(cwd, dir, 'skills'),
+    ]),
+    ...(options.customPath === undefined ? [] : [expandHomePath(options.customPath)]),
+    path.join(homeDir, '.webcmd', 'skills'),
+  ]);
+  const skills = listWebcmdSkills(options.packageRoot);
+  const removed: string[] = [];
+
+  for (const root of roots) {
+    for (const skill of skills) {
+      const linkPath = path.join(root, skill.name);
+      const current = safeLstat(linkPath);
+      if (!current) continue;
+      if (!current.isSymbolicLink()) {
+        throw new ArgumentError(`Refusing to remove non-symlink path: ${linkPath}`, 'Remove it manually if it is no longer needed.');
+      }
+      removed.push(linkPath);
+    }
+  }
+
+  for (const linkPath of removed) fs.unlinkSync(linkPath);
+  return { removed };
 }
 
 function updateStableSkillLinks(options: WebcmdSkillInstallOptions): WebcmdSkillLink[] {

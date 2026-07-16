@@ -4,7 +4,7 @@ import * as path from 'node:path';
 import yaml from 'js-yaml';
 import { describe, expect, it } from 'vitest';
 import { ArgumentError } from './errors.js';
-import { installWebcmdSkill, listWebcmdSkills, updateWebcmdSkill } from './skills.js';
+import { installWebcmdSkill, listWebcmdSkills, removeWebcmdSkills, updateWebcmdSkill } from './skills.js';
 
 function makePackageRoot(label = 'current'): string {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), `webcmd-skills-${label}-`));
@@ -142,5 +142,39 @@ describe('webcmd skills content', () => {
     fs.mkdirSync(stablePath, { recursive: true });
 
     expect(() => updateWebcmdSkill({ packageRoot, homeDir })).toThrow(ArgumentError);
+  });
+
+  it('removes bundled skill links from every supported location', () => {
+    const packageRoot = makePackageRoot();
+    const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'webcmd-home-'));
+    const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'webcmd-project-'));
+    const customPath = fs.mkdtempSync(path.join(os.tmpdir(), 'webcmd-custom-skills-'));
+
+    for (const provider of ['agents', 'codex', 'claude']) {
+      installWebcmdSkill({ packageRoot, homeDir, cwd, provider, scope: 'user' });
+      installWebcmdSkill({ packageRoot, homeDir, cwd, provider, scope: 'project' });
+    }
+    installWebcmdSkill({ packageRoot, homeDir, cwd, customPath });
+
+    const result = removeWebcmdSkills({ packageRoot, homeDir, cwd, customPath });
+
+    expect(result.removed).toHaveLength(24);
+    for (const linkPath of result.removed) {
+      expect(() => fs.lstatSync(linkPath)).toThrow();
+    }
+    expect(removeWebcmdSkills({ packageRoot, homeDir, cwd, customPath })).toEqual({ removed: [] });
+  });
+
+  it('refuses removal before deleting any links when a destination is not a symlink', () => {
+    const packageRoot = makePackageRoot();
+    const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'webcmd-home-'));
+    const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'webcmd-project-'));
+    const installed = installWebcmdSkill({ packageRoot, homeDir, cwd, provider: 'agents', scope: 'user' });
+    const blocker = path.join(cwd, '.codex', 'skills', 'smart-search');
+    fs.mkdirSync(blocker, { recursive: true });
+
+    expect(() => removeWebcmdSkills({ packageRoot, homeDir, cwd })).toThrow(ArgumentError);
+    expect(fs.lstatSync(installed.skills[0].destination!).isSymbolicLink()).toBe(true);
+    expect(fs.lstatSync(blocker).isDirectory()).toBe(true);
   });
 });
