@@ -3,6 +3,7 @@ import { DAEMON_HEADER_NAME, DEFAULT_DAEMON_PORT } from '../constants.js';
 import type { BrowserRuntimeCommand, BrowserRuntimeResult } from '../browser/protocol.js';
 import type { BrowserRuntimeProvider } from '../browser/runtime/provider.js';
 import { buildCommandTimeoutFailure, getResponseCorsHeaders } from '../daemon-utils.js';
+import { getSessionLeaseKey, isSessionLeaseCommand, SessionLeaseRegistry } from '../session-lease.js';
 
 const MAX_BODY = 1024 * 1024;
 const LOG_BUFFER_SIZE = 200;
@@ -17,6 +18,44 @@ export interface DaemonServerHandle {
   server: Server;
   listen(): Promise<void>;
   close(): Promise<void>;
+}
+
+interface PendingCommand {
+  promise: Promise<BrowserRuntimeResult>;
+  runId?: string;
+  leaseKey?: string;
+}
+
+function commandTimeoutMs(command: BrowserRuntimeCommand): number {
+  return typeof command.deadlineAt === 'number' && command.deadlineAt > 0
+    ? Math.max(1000, command.deadlineAt - Date.now())
+    : (typeof command.timeout === 'number' && command.timeout > 0 ? command.timeout * 1000 : 120_000);
+}
+
+function waitForCommandResult(
+  command: BrowserRuntimeCommand,
+  providerPromise: Promise<BrowserRuntimeResult>,
+): Promise<BrowserRuntimeResult> {
+  const timeoutMs = commandTimeoutMs(command);
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const responsePromise = Promise.race([
+    providerPromise,
+    new Promise<BrowserRuntimeResult>((resolve) => {
+      timeoutId = setTimeout(() => {
+        const failure = buildCommandTimeoutFailure(command.action, timeoutMs);
+        resolve({
+          id: command.id,
+          ok: false,
+          errorCode: failure.errorCode,
+          error: failure.message,
+          errorHint: failure.errorHint,
+        });
+      }, timeoutMs);
+    }),
+  ]);
+  return responsePromise.finally(() => {
+    if (timeoutId) clearTimeout(timeoutId);
+  });
 }
 
 function readBody(req: IncomingMessage): Promise<string> {
@@ -57,7 +96,9 @@ export function createDaemonServer(provider: BrowserRuntimeProvider, opts: Daemo
   const port = opts.port ?? DEFAULT_DAEMON_PORT;
   const host = opts.host ?? '127.0.0.1';
   const logBuffer: Array<{ level: string; msg: string; ts: number }> = [];
-  const pending = new Map<string, Promise<BrowserRuntimeResult>>();
+  const pending = new Map<string, PendingCommand>();
+  const leases = new SessionLeaseRegistry();
+  const hasPendingWork = (runId: string) => [...pending.values()].some((entry) => entry.runId === runId);
   let shutdownStarted = false;
 
   function pushLog(level: string, msg: string): void {
@@ -108,6 +149,7 @@ export function createDaemonServer(provider: BrowserRuntimeProvider, opts: Daemo
         daemonVersion: opts.version,
         ...runtime,
         pending: pending.size + runtime.pending,
+        sessionLeases: leases.list(hasPendingWork).map(({ runId: _runId, ...lease }) => lease),
         memoryMB: Math.round(mem.rss / 1024 / 1024 * 10) / 10,
         port,
       });
@@ -147,34 +189,43 @@ export function createDaemonServer(provider: BrowserRuntimeProvider, opts: Daemo
         }
         const existing = pending.get(body.id);
         if (existing) {
-          const result = await existing;
+          const result = await waitForCommandResult(body, existing.promise);
           jsonResponse(res, result.ok ? 200 : result.errorCode === 'command_result_unknown' ? 408 : 400, result);
           return;
         }
-        const timeoutMs = typeof body.deadlineAt === 'number' && body.deadlineAt > 0
-          ? Math.max(1000, body.deadlineAt - Date.now())
-          : (typeof body.timeout === 'number' && body.timeout > 0 ? body.timeout * 1000 : 120_000);
-        let timeoutId: ReturnType<typeof setTimeout> | undefined;
-        const commandPromise: Promise<BrowserRuntimeResult> = Promise.race([
-          provider.dispatch(body),
-          new Promise<BrowserRuntimeResult>((resolve) => {
-            timeoutId = setTimeout(() => {
-              const failure = buildCommandTimeoutFailure(body.action, timeoutMs);
-              resolve({
-                id: body.id,
-                ok: false,
-                errorCode: failure.errorCode,
-                error: failure.message,
-                errorHint: failure.errorHint,
-              });
-            }, timeoutMs);
-          }),
-        ]).finally(() => {
-          if (timeoutId) clearTimeout(timeoutId);
+        if (body.action === 'lease-release') {
+          const released = typeof body.runId === 'string' ? leases.releaseByRunId(body.runId) : 0;
+          jsonResponse(res, 200, { id: body.id, ok: true, data: { released } });
+          return;
+        }
+        let leaseKey: string | undefined;
+        let runId: string | undefined;
+        if (isSessionLeaseCommand(body)) {
+          const profileId = provider.resolveProfileId?.(body)
+            ?? body.profileId
+            ?? body.contextId
+            ?? body.preferredContextId
+            ?? 'default';
+          leaseKey = getSessionLeaseKey(profileId, body.surface, body.session);
+          runId = body.runId;
+          const acquired = leases.acquire({
+            key: leaseKey,
+            runId,
+            command: body.command ?? body.action,
+            pid: body.pid,
+          }, hasPendingWork);
+          if (!acquired.acquired) {
+            const { key: _key, runId: _runId, ...holder } = acquired.holder;
+            jsonResponse(res, 409, { ok: false, code: 'session_busy', holder });
+            return;
+          }
+        }
+        const commandPromise = provider.dispatch(body).finally(() => {
+          if (leaseKey && runId) leases.heartbeat(leaseKey, runId);
           pending.delete(body.id);
         });
-        pending.set(body.id, commandPromise);
-        const result = await commandPromise;
+        pending.set(body.id, { promise: commandPromise, runId, leaseKey });
+        const result = await waitForCommandResult(body, commandPromise);
         if (!result.ok) pushLog('warn', `Command ${body.id} failed: ${result.error ?? result.errorCode ?? 'unknown error'}`);
         jsonResponse(res, result.ok ? 200 : result.errorCode === 'command_result_unknown' ? 408 : 400, result);
       } catch (err) {

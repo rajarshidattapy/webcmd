@@ -1,4 +1,5 @@
 import { DAEMON_HEADER_NAME, DEFAULT_DAEMON_PORT } from '../constants.js';
+import type { SessionLeaseStatus } from '../session-lease.js';
 
 const DAEMON_PORT = DEFAULT_DAEMON_PORT;
 const DAEMON_URL = `http://127.0.0.1:${DAEMON_PORT}`;
@@ -18,6 +19,7 @@ export interface DaemonStatus {
   profiles?: BrowserProfileStatus[];
   pending: number;
   commandResultUnknown?: number;
+  sessionLeases?: SessionLeaseStatus[];
   memoryMB: number;
   port: number;
 }

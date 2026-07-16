@@ -81,6 +81,11 @@ function pageIsClosed(page: PlaywrightPage): boolean {
   return page.isClosed?.() === true;
 }
 
+function isClosedContextError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /Target page, context or browser has been closed/i.test(message);
+}
+
 export class CloakSessionManager {
   readonly networkCapture = new CloakNetworkCapture();
 
@@ -135,16 +140,26 @@ export class CloakSessionManager {
       if (!pageIsClosed(existing.page)) await existing.page.close().catch(() => {});
     }
 
-    const existingPages = runtime.context.pages();
-    // freshPage must never adopt a leftover tab — its whole point is a clean DOM.
-    const page = !freshPage && existingPages[0] && runtime.pages.size === 0 ? existingPages[0] : await runtime.context.newPage();
-    const pageId = nextPageId();
-    const entry: PageEntry = { page, pageId, session, surface, siteSession: input.siteSession, idleTimeout: input.idleTimeout };
-    runtime.pages.set(leaseKey, entry);
-    this.refreshIdleTimer(runtime, leaseKey, entry);
-    runtime.selectedPageId = pageId;
-    runtime.lastSeenAt = Date.now();
-    return { profileId, leaseKey, context: runtime.context, page, pageId };
+    return this.createPageWithRecovery(
+      profileId,
+      input.windowMode,
+      (candidate) => {
+        const existingPages = candidate.context.pages();
+        // freshPage must never adopt a leftover tab — its whole point is a clean DOM.
+        return !freshPage && existingPages[0] && candidate.pages.size === 0
+          ? existingPages[0]
+          : candidate.context.newPage();
+      },
+      (candidate, page) => {
+        const pageId = nextPageId();
+        const entry: PageEntry = { page, pageId, session, surface, siteSession: input.siteSession, idleTimeout: input.idleTimeout };
+        candidate.pages.set(leaseKey, entry);
+        this.refreshIdleTimer(candidate, leaseKey, entry);
+        candidate.selectedPageId = pageId;
+        candidate.lastSeenAt = Date.now();
+        return { profileId, leaseKey, context: candidate.context, page, pageId };
+      },
+    );
   }
 
   findPageById(pageId: string, opts: Pick<SessionKeyInput, 'idleTimeout'> = {}): CloakPageLease | null {
@@ -207,18 +222,38 @@ export class CloakSessionManager {
     const profileId = normalizeProfileId(input.profileId);
     const session = requireSession(input.session);
     const surface = normalizeSurface(input.surface);
-    const runtime = await this.getProfileRuntime(profileId, input.windowMode);
-    const page = await runtime.context.newPage();
+    const acquired = await this.createPageWithRecovery(
+      profileId,
+      input.windowMode,
+      (candidate) => candidate.context.newPage(),
+      (runtime, page) => ({ runtime, page }),
+    );
     if (input.url) {
-      await page.goto(input.url, { waitUntil: 'load' });
+      try {
+        await acquired.page.goto(input.url, { waitUntil: 'load' });
+      } catch (error) {
+        if (!pageIsClosed(acquired.page)) await acquired.page.close().catch(() => {});
+        throw error;
+      }
+    }
+    if (this.profiles.get(profileId) !== acquired.runtime) {
+      if (!pageIsClosed(acquired.page)) await acquired.page.close().catch(() => {});
+      throw new Error('Target page, context or browser has been closed');
     }
     const pageId = nextPageId();
     const leaseKey = `${resolveLeaseKey(input)}\u0000${pageId}`;
-    const entry: PageEntry = { page, pageId, session, surface, siteSession: input.siteSession, idleTimeout: input.idleTimeout };
-    runtime.pages.set(leaseKey, entry);
-    this.refreshIdleTimer(runtime, leaseKey, entry);
-    runtime.lastSeenAt = Date.now();
-    return { profileId, leaseKey, context: runtime.context, page, pageId };
+    const entry: PageEntry = {
+      page: acquired.page,
+      pageId,
+      session,
+      surface,
+      siteSession: input.siteSession,
+      idleTimeout: input.idleTimeout,
+    };
+    acquired.runtime.pages.set(leaseKey, entry);
+    this.refreshIdleTimer(acquired.runtime, leaseKey, entry);
+    acquired.runtime.lastSeenAt = Date.now();
+    return { profileId, leaseKey, context: acquired.runtime.context, page: acquired.page, pageId };
   }
 
   async selectPage(input: Pick<SessionKeyInput, 'profileId' | 'windowMode'> & { pageId?: string; index?: number }): Promise<CloakPageLease | null> {
@@ -350,8 +385,47 @@ export class CloakSessionManager {
       context = await launchPersistentContext(launchOptions);
     }
     const runtime = { context, pages: new Map(), lastSeenAt: Date.now() };
+    this.attachRuntimeLifecycle(profileId, runtime);
     this.profiles.set(profileId, runtime);
     return runtime;
+  }
+
+  private invalidateProfileRuntime(profileId: string, runtime: ProfileRuntime): void {
+    if (this.profiles.get(profileId) !== runtime) return;
+    this.profiles.delete(profileId);
+    for (const entry of runtime.pages.values()) {
+      if (entry.idleTimer) clearTimeout(entry.idleTimer);
+      this.networkCapture.stop(entry.page);
+    }
+    runtime.pages.clear();
+    runtime.selectedPageId = undefined;
+  }
+
+  private attachRuntimeLifecycle(profileId: string, runtime: ProfileRuntime): void {
+    runtime.context.on('close', () => this.invalidateProfileRuntime(profileId, runtime));
+  }
+
+  private async createPageWithRecovery<T>(
+    profileId: string,
+    windowMode: BrowserWindowMode | undefined,
+    createPage: (runtime: ProfileRuntime) => PlaywrightPage | Promise<PlaywrightPage>,
+    commitPage: (runtime: ProfileRuntime, page: PlaywrightPage) => T,
+    attempt = 0,
+  ): Promise<T> {
+    const runtime = await this.getProfileRuntime(profileId, windowMode);
+    let page: PlaywrightPage;
+    try {
+      page = await createPage(runtime);
+    } catch (error) {
+      if (attempt !== 0 || !isClosedContextError(error)) throw error;
+      this.invalidateProfileRuntime(profileId, runtime);
+      return this.createPageWithRecovery(profileId, windowMode, createPage, commitPage, 1);
+    }
+    if (this.profiles.get(profileId) !== runtime) {
+      if (!pageIsClosed(page)) await page.close().catch(() => {});
+      throw new Error('Target page, context or browser has been closed');
+    }
+    return commitPage(runtime, page);
   }
 
   private openEntries(runtime: ProfileRuntime): [string, PageEntry][] {

@@ -1,3 +1,5 @@
+import type { SessionLeaseStatus } from '../session-lease.js';
+
 export type BrowserRuntimeAction =
   | 'exec'
   | 'navigate'
@@ -12,7 +14,8 @@ export type BrowserRuntimeAction =
   | 'network-capture-read'
   | 'wait-download'
   | 'cdp'
-  | 'frames';
+  | 'frames'
+  | 'lease-release';
 
 export type BrowserSurface = 'browser' | 'adapter';
 export type SiteSessionMode = 'ephemeral' | 'persistent';
@@ -54,6 +57,14 @@ export interface BrowserRuntimeCommand {
   contextId?: string;
   preferredContextId?: string;
   profileId?: string;
+  /** Stable identity for the complete logical CLI command run. */
+  runId?: string;
+  /** Human-readable canonical command that owns the logical run. */
+  command?: string;
+  /** Access classification used by daemon-local lease arbitration. */
+  access?: 'read' | 'write';
+  /** Originating CLI process, used only for actionable local busy guidance. */
+  pid?: number;
 }
 
 export interface BrowserRuntimeResult {
@@ -84,4 +95,6 @@ export interface BrowserRuntimeStatus {
   profiles: BrowserRuntimeProfileStatus[];
   pending: number;
   commandResultUnknown?: number;
+  /** Active local leases with internal run ownership tokens removed. */
+  sessionLeases?: SessionLeaseStatus[];
 }
