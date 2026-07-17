@@ -12,13 +12,26 @@ This skill is for **driving a live browser** to accomplish an agent task. If you
 
 ---
 
+## Adapter fallback gate
+
+Before starting a raw browser session, filter `webcmd list -f json` at the source using request-derived terms across `site`, `name`, `description`, and `columns`; follow `webcmd-usage` for the command shape. Any truncation warning means adapter discovery is incomplete: narrow the filter and inspect again. Absence from truncated output never proves that no adapter exists.
+
+Raw `webcmd browser` use is allowed only after both conditions hold:
+
+1. The complete, non-truncated filtered registry result for the missing capability is exactly `[]`.
+2. A complete, non-truncated `webcmd plugin search <capability> -f json` result returns no match and no error.
+
+If plugin search returns a match, offer installation. If its output is truncated, refine the query or output and inspect again. If it errors, report the error and stop instead of opening the browser.
+
+---
+
 ## Prerequisites
 
 ```bash
 webcmd doctor
 ```
 
-Until `doctor` is green, nothing else will work. Typical failures: Chrome not running, extension not installed, debug port blocked by 1Password / other extensions. The doctor output tells you which.
+Until `doctor` is green, browser commands will not work. Registry and plugin discovery do not require `doctor`. Typical failures: Chrome not running, extension not installed, debug port blocked by 1Password / other extensions. The doctor output tells you which.
 
 ---
 
@@ -61,7 +74,7 @@ Bound sessions use the normal Webcmd session lifecycle; `unbind` releases the Cl
 ## Critical rules
 
 1. **Always inspect before you act.** Run `state` or `find` first. Never hard-code a ref or selector from memory across sessions — indices are per-snapshot.
-2. **Prefer site adapters before raw browser driving.** If `webcmd <site> <command>` already covers the task, use that adapter command first (`webcmd facebook notifications`, `webcmd reddit read`, `webcmd chatgpt model <level>`, etc.). Use `webcmd browser ...` only for gaps, debugging, or one-off UI flows the adapter does not expose.
+2. **Prefer site adapters before raw browser driving.** Complete the adapter fallback gate above. If `webcmd <site> <command>` already covers the task, use that adapter command first (`webcmd facebook notifications`, `webcmd reddit read`, `webcmd chatgpt model <level>`, etc.). Use `webcmd browser ...` only for gaps, debugging, or one-off UI flows the adapter does not expose.
 3. **Prefer numeric ref over CSS once you have it.** Numeric refs survive mild DOM shifts because the CLI fingerprints each tagged element. A CSS selector written by hand will break the first time the site re-renders.
 4. **Read `match_level` after every write.** `exact` = all good. `stable` = the element is the same but some soft attrs drifted — your action still applied. `reidentified` = the original ref was gone and the CLI found a unique replacement; double-check you hit the right element.
 5. **Use the `compound` field for form controls.** Do not regex-guess a date format, do not `state` twice to get the full `<select>` options list. The compound envelope has the format string, full option list up to 50, `options_total` for overflow, and `accept`/`multiple` for `<input type=file>`.
@@ -433,6 +446,7 @@ normal DOM `state`, or navigate/bind directly to the iframe URL when possible.
 | `stale_ref` across every command | You are reusing refs from a prior page. Re-`state`. |
 | `click` succeeds but nothing happens | The element is probably a decorative wrapper stealing clicks from the real target. `find --css "..."` with a narrower selector and retry on the inner element. |
 | `type` appears to finish but value is wrong | Autocomplete, masked input, or React controlled re-render. Verify with `get value`. Add `keys Enter` or re-type. |
+| `webcmd list -f json` output is truncated | Adapter discovery is incomplete. Filter at the source with request-derived terms and narrow until the complete result is `[]`; do not start browser fallback yet. |
 | Giant `get html` output | Pass `--selector` + `--as json --depth 3 --children-max 20 --text-max 200`. |
 | Network cache seems stale | Bump `--ttl` down, or let it expire. The cache lives at `~/.webcmd/cache/browser-network/`. |
 
