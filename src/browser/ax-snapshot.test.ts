@@ -56,6 +56,37 @@ describe('AX snapshot prototype', () => {
     ]);
   });
 
+  it('stops ignored-node cycles without changing promoted indentation', () => {
+    const result = buildAxSnapshot({
+      nodes: [
+        { nodeId: '1', role: { value: 'RootWebArea' }, childIds: ['2'] },
+        { nodeId: '2', ignored: true, childIds: ['2', '3'] },
+        { nodeId: '3', role: { value: 'button' }, name: { value: 'Save' }, backendDOMNodeId: 30 },
+      ],
+    });
+
+    expect(result.text).toContain('\n  [1]button "Save"\n');
+    expect(result.refs).toHaveLength(1);
+  });
+
+  it('bounds traversal through long ignored-node chains', () => {
+    const ignored = Array.from({ length: 201 }, (_, index) => ({
+      nodeId: String(index + 2),
+      ignored: true,
+      childIds: [String(index + 3)],
+    }));
+    const result = buildAxSnapshot({
+      nodes: [
+        { nodeId: '1', role: { value: 'RootWebArea' }, childIds: ['2'] },
+        ...ignored,
+        { nodeId: '203', role: { value: 'button' }, name: { value: 'Too deep' }, backendDOMNodeId: 203 },
+      ],
+    });
+
+    expect(result.text).not.toContain('Too deep');
+    expect(result.refs).toHaveLength(0);
+  });
+
   it('tracks nth only for duplicate role/name pairs', () => {
     const result = buildAxSnapshot({
       nodes: [
