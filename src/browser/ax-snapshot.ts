@@ -130,7 +130,7 @@ function renderAxTree(
   const rawNodes = Array.isArray((axTree as { nodes?: unknown[] } | null)?.nodes)
     ? ((axTree as { nodes: unknown[] }).nodes as AxNode[])
     : [];
-  const nodes = rawNodes.filter((node) => node && !node.ignored);
+  const nodes = rawNodes.filter((node) => node);
   const byId = new Map<string, AxNode>();
   const parentIds = new Set<string>();
   for (const node of nodes) {
@@ -150,6 +150,13 @@ function renderAxTree(
 
   function render(node: AxNode | undefined, depth: number): boolean {
     if (!node || depth > maxDepth) return false;
+    if (node.ignored) {
+      let hasVisibleChild = false;
+      for (const childId of node.childIds ?? []) {
+        if (render(byId.get(childId), depth)) hasVisibleChild = true;
+      }
+      return hasVisibleChild;
+    }
     const role = axString(node.role) || 'generic';
     const name = cleanText(axString(node.name));
     const value = cleanText(axString(node.value) || propertyValue(node, 'value'));

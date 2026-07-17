@@ -38,6 +38,24 @@ describe('AX snapshot prototype', () => {
     });
   });
 
+  it('keeps actionable descendants of ignored AX nodes', () => {
+    const result = buildAxSnapshot({
+      nodes: [
+        { nodeId: '1', role: { value: 'RootWebArea' }, childIds: ['2'] },
+        { nodeId: '2', ignored: true, childIds: ['3', '4'] },
+        { nodeId: '3', role: { value: 'button' }, name: { value: 'First' }, backendDOMNodeId: 30 },
+        { nodeId: '4', role: { value: 'button' }, name: { value: 'Second' }, backendDOMNodeId: 40 },
+      ],
+    });
+
+    expect(result.text).toContain('  [1]button "First"\n  [2]button "Second"');
+    expect(result.text).not.toContain('ignored');
+    expect([...result.refs.values()]).toEqual([
+      { ref: '1', backendNodeId: 30, role: 'button', name: 'First' },
+      { ref: '2', backendNodeId: 40, role: 'button', name: 'Second' },
+    ]);
+  });
+
   it('tracks nth only for duplicate role/name pairs', () => {
     const result = buildAxSnapshot({
       nodes: [
