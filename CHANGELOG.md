@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.4.0](https://github.com/agentrhq/webcmd/compare/webcmd-v0.3.3...webcmd-v0.4.0) (2026-07-17)
+## [0.3.4](https://github.com/agentrhq/webcmd/compare/webcmd-v0.3.3...webcmd-v0.3.4) (2026-07-17)
 
 
 ### Features
