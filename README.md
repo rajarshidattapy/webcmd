@@ -37,6 +37,9 @@ On top of live browser control, WebCMD adds 3 layers of learnings. Each layer co
 | 3. CLI authoring | The action space is known, but the path is still too variable for one fixed sequence. | Explicitly author a reusable `webcmd <site>` adapter with structured output, so future agents spend tokens on the task instead of navigation. |
 | 4. Extend existing CLIs | The workflow is deterministic enough to stop browsing. | Extend the `webcmd <site>` adapter with a tailored command so the workflow runs instantly with the least amount of tokens. |
 
+## Demo
+
+https://github.com/user-attachments/assets/04eceadc-d398-4303-984d-ae3197bfa664
 
 ## Quick Start
 
