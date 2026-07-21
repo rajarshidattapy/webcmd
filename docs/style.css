@@ -39,6 +39,32 @@ pre code {
   color: #0f0f0f;
 }
 
+#content-area :is(h1, h2, h3, h4, h5, h6) {
+  font-weight: 700;
+}
+
+.dark #content-area :is(h1, h2, h3, h4, h5, h6) {
+  color: rgb(215 215 215);
+}
+
+.dark #content-area .prose a {
+  border-bottom-color: #fff;
+  color: #fff;
+}
+
+.dark a.nav-tabs-item[aria-current="location"] {
+  border-bottom-color: #fff;
+}
+
+.dark #sidebar a[aria-current="page"] {
+  background-color: rgb(255 255 255 / 8%);
+  color: #fff;
+}
+
+.dark main a[aria-current="location"] {
+  color: #fff;
+}
+
 [data-component-part="card-title"] {
   font-family: "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
 }
