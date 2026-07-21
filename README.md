@@ -50,6 +50,8 @@ npm install -g @agentrhq/webcmd
 webcmd skills add
 ```
 
+When prompted, choose a supported harness such as Codex or Claude, or enter a custom skills path.
+
 In your agent harness, load or tag `webcmd-usage`, then describe the outcome you want.
 
 ```text
