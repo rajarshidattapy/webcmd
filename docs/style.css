@@ -52,6 +52,17 @@ pre code {
 :root {
   --webcmd-radius: 0.375rem;
   --webcmd-sidebar-radius: 0.125rem;
+  --gray-50: 243 243 243;
+  --gray-100: 238 238 238;
+  --gray-200: 223 223 223;
+  --gray-300: 206 206 206;
+  --gray-400: 159 159 159;
+  --gray-500: 112 112 112;
+  --gray-600: 80 80 80;
+  --gray-700: 63 63 63;
+  --gray-800: 37 37 37;
+  --gray-900: 23 23 23;
+  --gray-950: 10 10 10;
   --rounded-lg: var(--webcmd-radius);
   --rounded-xl: var(--webcmd-radius);
   --rounded-2xl: var(--webcmd-radius);
