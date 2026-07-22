@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { JSDOM } from 'jsdom';
 import { ArgumentError, AuthRequiredError } from '@agentrhq/webcmd/errors';
 import { getRegistry } from '@agentrhq/webcmd/registry';
@@ -193,9 +193,30 @@ describe('zepto helpers', () => {
 
 describe('zepto registry shape', () => {
   it('registers the buying-path commands', () => {
-    for (const name of ['login', 'location', 'search', 'product', 'add-to-cart', 'cart', 'checkout', 'place-order']) {
+    for (const name of ['login', 'whoami', 'location', 'search', 'product', 'add-to-cart', 'cart', 'checkout', 'place-order']) {
       expect(getRegistry().get(`zepto/${name}`)).toBeDefined();
     }
+  });
+
+  it('opens login without waiting for manual authentication', async () => {
+    const login = getRegistry().get('zepto/login');
+    const whoami = getRegistry().get('zepto/whoami');
+    const page = {
+      goto: vi.fn().mockResolvedValue(undefined),
+      wait: vi.fn().mockResolvedValue(undefined),
+      evaluate: vi.fn().mockResolvedValue({ loggedIn: false }),
+    };
+
+    expect(login.args).toEqual([]);
+    expect(login.columns).toEqual(expect.arrayContaining(['action', 'verify_command']));
+    expect(whoami).toBeDefined();
+    await expect(login.func(page, {})).resolves.toEqual([expect.objectContaining({
+      status: 'action_required',
+      logged_in: false,
+      site: 'zepto',
+      verify_command: 'webcmd zepto whoami',
+    })]);
+    expect(page.wait).not.toHaveBeenCalledWith(2);
   });
 
   it('marks only cart-changing commands as write', () => {
