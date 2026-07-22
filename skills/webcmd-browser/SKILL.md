@@ -339,12 +339,13 @@ webcmd browser hn open "https://news.ycombinator.com" \
 
 1. On a clear login redirect or auth wall, stop browser writes.
 2. If the site exposes a login command, run `webcmd <site> login` and read its `action_required` result and returned `verify_command` (normally `webcmd <site> whoami`).
-3. Tell the user to complete sign-in in the already-visible Webcmd browser.
+3. Tell the user to complete sign-in in the visible browser. If there is no site login command, use the current browser.
 4. Never ask for or type passwords, OTPs, recovery codes, cookies, or session secrets.
-5. After the user reports done, run the returned `verify_command`; verification must succeed before retrying the original workflow.
-6. Take fresh browser state before continuing; refs from before handoff are stale.
+5. If login returned a `verify_command`, run that exact command after the user reports done; verification must succeed before retrying the original workflow.
+6. With no site login command and therefore no returned verifier, take fresh browser state and use an available identity check or verify the intended post-action state; that verification must succeed before retrying.
+7. Continue only from fresh browser state; refs from before handoff are stale.
 
-For a CAPTCHA or user takeover, stop automation and let the user act in the visible browser. After the user reports done, run the returned `verify_command`; verification must succeed before retrying. Keep CAPTCHA outside automated retries.
+For a CAPTCHA or user takeover, stop automation and let the user act in the visible browser. After the user reports done, apply the same conditional verification policy above; their report alone is not verification. Keep CAPTCHA outside automated retries.
 
 ### Pick from a long dropdown
 

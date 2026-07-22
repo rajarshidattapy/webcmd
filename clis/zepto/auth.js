@@ -25,7 +25,7 @@ function openLoginEvaluate() {
 
 async function verifyZeptoIdentity(page) {
   await safeGoto(page, HOME_URL, 'zepto login', ZEPTO_NAV_OPTIONS);
-  const result = await page.evaluate(authEvaluate()).catch(() => ({ loggedIn: false }));
+  const result = await page.evaluate(authEvaluate());
   if (!result.loggedIn) throw new AuthRequiredError(DOMAIN, 'Zepto login is required');
   return {};
 }
@@ -38,7 +38,8 @@ registerSiteAuthCommands({
   verify: verifyZeptoIdentity,
   openLogin: async (page) => {
     await safeGoto(page, HOME_URL, 'zepto login', ZEPTO_NAV_OPTIONS);
-    await page.evaluate(openLoginEvaluate());
+    const opened = await page.evaluate(openLoginEvaluate());
+    if (!opened) throw new Error('Zepto login dialog did not open');
   },
 });
 

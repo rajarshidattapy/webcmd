@@ -85,6 +85,39 @@ describe('site auth command helper', () => {
     expect(page.goto).not.toHaveBeenCalled();
   });
 
+  it('completes and canonicalizes successful identity rows', async () => {
+    registerSiteAuthCommands({
+      site: 'auth-helper-canonical',
+      domain: 'example.com',
+      loginUrl: 'https://example.com/login',
+      columns: ['username', 'name'],
+      verify: async () => ({
+        logged_in: false,
+        site: 'wrong-site',
+        username: 'alice',
+        extra: 'preserved',
+      }),
+    });
+    const page = pageMock();
+    const identity = {
+      logged_in: true,
+      site: 'auth-helper-canonical',
+      username: 'alice',
+      name: '',
+      extra: 'preserved',
+    };
+
+    await expect(getRegistry().get('auth-helper-canonical/whoami').func(page, {}))
+      .resolves.toEqual([identity]);
+    await expect(getRegistry().get('auth-helper-canonical/login').func(page, {}))
+      .resolves.toEqual([{
+        status: 'already_logged_in',
+        ...identity,
+        action: '',
+        verify_command: '',
+      }]);
+  });
+
   it('opens the default login URL and returns an immediate handoff', async () => {
     registerSiteAuthCommands({
       site: 'auth-helper-login',

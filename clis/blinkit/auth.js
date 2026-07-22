@@ -61,7 +61,8 @@ registerSiteAuthCommands({
   openLogin: async (page) => {
     await page.goto(BASE);
     await page.wait(1);
-    await page.evaluate(buildOpenLoginEvaluate());
+    const result = await page.evaluate(buildOpenLoginEvaluate());
+    if (!result?.opened) throw new Error(`Blinkit login dialog did not open: ${result?.detail || 'unknown reason'}`);
   },
 });
 

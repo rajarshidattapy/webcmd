@@ -219,6 +219,28 @@ describe('zepto registry shape', () => {
     expect(page.wait).not.toHaveBeenCalledWith(2);
   });
 
+  it('propagates Zepto identity probe failures', async () => {
+    const error = new Error('evaluate crashed');
+    const page = {
+      goto: vi.fn().mockResolvedValue(undefined),
+      evaluate: vi.fn().mockRejectedValue(error),
+    };
+
+    await expect(getRegistry().get('zepto/whoami').func(page, {})).rejects.toBe(error);
+  });
+
+  it('rejects when the Zepto login dialog cannot be opened', async () => {
+    const login = getRegistry().get('zepto/login');
+    const page = {
+      goto: vi.fn().mockResolvedValue(undefined),
+      evaluate: vi.fn()
+        .mockResolvedValueOnce({ loggedIn: false })
+        .mockResolvedValueOnce(false),
+    };
+
+    await expect(login.func(page, {})).rejects.toThrow('Zepto login dialog did not open');
+  });
+
   it('marks only cart-changing commands as write', () => {
     expect(getRegistry().get('zepto/location').access).toBe('read');
     expect(getRegistry().get('zepto/search').access).toBe('read');

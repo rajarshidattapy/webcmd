@@ -118,7 +118,9 @@ describe('webcmd skills content', () => {
       expect(skill).toMatch(/CAPTCHA[\s\S]{0,250}(?:human handoff|stop(?:s)? automation)/i);
       expect(skill).toMatch(/(?:must not|never).*?(?:password|secret|credential)/i);
     }
-    expect(browser).not.toMatch(/whoami\s+when available/i);
+    for (const skill of [browser, usage, autofix]) {
+      expect(skill).toMatch(/no (?:site )?login command[\s\S]{0,500}fresh browser state[\s\S]{0,500}(?:identity check|post-action state)[\s\S]{0,250}before retry/i);
+    }
     expect(autofix).toMatch(/CAPTCHA[\s\S]{0,250}stop automation[\s\S]{0,250}verification must succeed/i);
   });
 

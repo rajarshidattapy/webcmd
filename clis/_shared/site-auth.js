@@ -3,11 +3,11 @@ import { cli, Strategy } from '@agentrhq/webcmd/registry';
 
 const LOGIN_ACTION = 'Complete sign-in in the opened Webcmd browser, then tell the agent when you are done.';
 
-function normalizeIdentity(site, identity) {
+function normalizeIdentity(config, identity) {
   const row = identity && typeof identity === 'object' && !Array.isArray(identity)
     ? identity
     : {};
-  return { logged_in: true, site, ...row };
+  return { ...blankIdentity(config), ...row, logged_in: true, site: config.site };
 }
 
 function isAuthRequired(error) {
@@ -15,7 +15,7 @@ function isAuthRequired(error) {
 }
 
 async function tryProbe(config, page) {
-  return normalizeIdentity(config.site, await config.verify(page, { phase: 'identity' }));
+  return normalizeIdentity(config, await config.verify(page, { phase: 'identity' }));
 }
 
 function identityColumns(config) {

@@ -171,6 +171,20 @@ describe('blinkit registry shape', () => {
     expect(page.wait).not.toHaveBeenCalledWith(2);
   });
 
+  it('rejects when the Blinkit login dialog cannot be opened', async () => {
+    const login = getRegistry().get('blinkit/login');
+    const page = {
+      goto: vi.fn().mockResolvedValue(undefined),
+      wait: vi.fn().mockResolvedValue(undefined),
+      evaluate: vi.fn()
+        .mockResolvedValueOnce({ kind: 'auth', detail: 'login required' })
+        .mockResolvedValueOnce({ opened: false, detail: 'login_button_missing' }),
+    };
+
+    await expect(login.func(page, {}))
+      .rejects.toThrow('Blinkit login dialog did not open: login_button_missing');
+  });
+
   it('marks only cart-changing commands as write', () => {
     expect(getRegistry().get('blinkit/search').access).toBe('read');
     expect(getRegistry().get('blinkit/product').access).toBe('read');
