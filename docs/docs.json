@@ -9,8 +9,8 @@
     "dark": "#006B9A"
   },
   "logo": {
-    "light": "/webcmd.svg",
-    "dark": "/webcmd.svg",
+    "light": "/webcmd-logo-light.svg",
+    "dark": "/webcmd-logo-dark.svg",
     "href": "https://webcmd.dev"
   },
   "favicon": "/webcmd.svg",
