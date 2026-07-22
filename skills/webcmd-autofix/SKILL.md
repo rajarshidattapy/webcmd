@@ -12,9 +12,10 @@ When a `webcmd` command fails because a website changed its DOM, API, or respons
 
 Hard stops before any code change:
 
-- **`AUTH_REQUIRED`** (exit code 77): run `webcmd <site> login`, return its `action_required` instructions to the user, wait for sign-in in the visible browser, verify with `webcmd <site> whoami`, then retry the original command. Never request, type, echo, store, or automate passwords, OTPs, recovery codes, cookies, or session secrets.
+- **`AUTH_REQUIRED`** (exit code 77): run `webcmd <site> login`, return its `action_required` instructions and `verify_command` (normally `webcmd <site> whoami`) to the user, then wait for the user to report done in the visible browser. Run the returned `verify_command`; verification must succeed before retrying the original command. Never request, type, echo, store, or automate passwords, OTPs, recovery codes, cookies, or session secrets.
 - **`BROWSER_CONNECT`** (exit code 69): stop. Tell the user to run `webcmd doctor`.
-- **CAPTCHA / rate limiting / IP block:** stop. This is not an adapter issue.
+- **CAPTCHA:** stop automation and let the user act in the visible browser. Wait for the user to report done, run the returned `verify_command`, and verification must succeed before retrying. CAPTCHA is not an adapter issue.
+- **Rate limiting / IP block:** stop. This is not an adapter issue.
 
 Scope constraint:
 
@@ -124,7 +125,7 @@ Read the trace summary and adapter source. Classify root cause:
 | SELECTOR | DOM restructured or class/id changed | Explore current DOM and find a stable selector |
 | EMPTY_RESULT | API response schema changed, data moved, or real empty result | Check network and visible page before patching |
 | API_ERROR | Endpoint URL changed or new params required | Discover current API through network evidence |
-| AUTH_REQUIRED | Login flow changed or cookies expired | Run `webcmd <site> login` -> user completes sign-in in the visible browser -> `webcmd <site> whoami` -> retry; CAPTCHA remains a human handoff. |
+| AUTH_REQUIRED | Login flow changed or cookies expired | Run `webcmd <site> login` -> return `action_required` and `verify_command` (normally `webcmd <site> whoami`) -> user reports done -> run returned `verify_command`; verification must succeed before retry. CAPTCHA stops automation until that succeeds. |
 | TIMEOUT | Page loads differently or lazy-load signal changed | Update wait conditions |
 | PAGE_CHANGED | Major redesign | May need full adapter rewrite through `webcmd-adapter-author` |
 

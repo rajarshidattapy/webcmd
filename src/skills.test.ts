@@ -98,6 +98,7 @@ describe('webcmd skills content', () => {
     const usage = bundledSkill('webcmd-usage');
     const autofix = bundledSkill('webcmd-autofix');
     const author = bundledSkill('webcmd-adapter-author');
+    const skills = [browser, usage, autofix, author];
 
     expect(browser).toContain('webcmd <site> login');
     expect(browser).toContain('webcmd <site> whoami');
@@ -109,6 +110,16 @@ describe('webcmd skills content', () => {
     expect(usage).toContain('action_required');
     expect(autofix).toContain('webcmd <site> login');
     expect(author).toContain('registerSiteAuthCommands');
+    for (const skill of skills) {
+      expect(skill).toContain('action_required');
+      expect(skill).toContain('verify_command');
+      expect(skill).toMatch(/verify_command[\s\S]{0,250}verification must succeed[\s\S]{0,250}retry/i);
+      expect(skill).toMatch(/verify_command[\s\S]{0,250}user[\s\S]{0,250}(?:done|complet)/i);
+      expect(skill).toMatch(/CAPTCHA[\s\S]{0,250}(?:human handoff|stop(?:s)? automation)/i);
+      expect(skill).toMatch(/(?:must not|never).*?(?:password|secret|credential)/i);
+    }
+    expect(browser).not.toMatch(/whoami\s+when available/i);
+    expect(autofix).toMatch(/CAPTCHA[\s\S]{0,250}stop automation[\s\S]{0,250}verification must succeed/i);
   });
 
   it('adds bundled skills once and refreshes them after package updates', () => {

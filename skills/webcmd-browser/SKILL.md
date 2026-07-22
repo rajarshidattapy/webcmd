@@ -338,13 +338,13 @@ webcmd browser hn open "https://news.ycombinator.com" \
 ### Authentication and human handoff
 
 1. On a clear login redirect or auth wall, stop browser writes.
-2. If the site exposes a login command, run `webcmd <site> login`.
+2. If the site exposes a login command, run `webcmd <site> login` and read its `action_required` result and returned `verify_command` (normally `webcmd <site> whoami`).
 3. Tell the user to complete sign-in in the already-visible Webcmd browser.
 4. Never ask for or type passwords, OTPs, recovery codes, cookies, or session secrets.
-5. After the user says they are done, run `webcmd <site> whoami` when available.
+5. After the user reports done, run the returned `verify_command`; verification must succeed before retrying the original workflow.
 6. Take fresh browser state before continuing; refs from before handoff are stale.
 
-For a CAPTCHA or user takeover, pause writes and let the user act in the visible browser. Wait for “done,” then take fresh browser state and verify; keep CAPTCHA outside automated retries.
+For a CAPTCHA or user takeover, stop automation and let the user act in the visible browser. After the user reports done, run the returned `verify_command`; verification must succeed before retrying. Keep CAPTCHA outside automated retries.
 
 ### Pick from a long dropdown
 
