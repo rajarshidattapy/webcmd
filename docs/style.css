@@ -4,23 +4,6 @@ h5 {
   font-family: "Inter", sans-serif;
 }
 
-#navbar .nav-logo {
-  display: none;
-}
-
-#navbar a:has(.nav-logo)::after {
-  color: #006b9a;
-  content: "webcmd";
-  font-family: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 1.125rem;
-  font-weight: 500;
-  letter-spacing: -0.025em;
-}
-
-.dark #navbar a:has(.nav-logo)::after {
-  color: #56c5ff;
-}
-
 code,
 kbd,
 samp,
