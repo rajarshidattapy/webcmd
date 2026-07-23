@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
+import { PKG_VERSION } from '../version.js';
 
 const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const entrypoint = path.join(packageRoot, 'src/main.ts');
@@ -186,7 +187,7 @@ async function createHostedFixture(outcome: 'success' | 'failure'): Promise<{
           userId: 'user_lifecycle',
           metadata: {
             contractSchemaVersion: 1,
-            webcmdPackageVersion: '0.3.0',
+            webcmdPackageVersion: PKG_VERSION,
             generatedAt: '2026-07-14T00:00:00.000Z',
           },
           commands: [command, authCommand],

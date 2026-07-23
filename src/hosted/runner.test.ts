@@ -10,14 +10,19 @@ import { rewriteBrowserArgv } from '../cli-argv-preprocess.js';
 import { createProgram } from '../cli.js';
 import { formatRootHelp } from '../command-presentation.js';
 import { HOSTED_ROOT_HELP } from '../completion-shared.js';
+import { PKG_VERSION } from '../version.js';
 import { makeHostedConfig } from './config.js';
 import { runHostedCli } from './runner.js';
+
+const [packageMajor, packageMinor] = PKG_VERSION.split('.');
+const compatiblePatchVersion = `${packageMajor}.${packageMinor}.99`;
+const incompatibleMinorVersion = `${packageMajor}.${Number(packageMinor) + 1}.0`;
 
 const manifest = {
   userId: 'user_demo',
   metadata: {
     contractSchemaVersion: 1,
-    webcmdPackageVersion: '0.3.0',
+    webcmdPackageVersion: PKG_VERSION,
     generatedAt: '2026-07-08T00:00:00.000Z',
   },
   commands: [
@@ -1181,7 +1186,7 @@ describe('runHostedCli', () => {
     const stdout = sink();
     const patchBumped = {
       ...manifest,
-      metadata: { ...manifest.metadata, webcmdPackageVersion: '0.3.99' },
+      metadata: { ...manifest.metadata, webcmdPackageVersion: compatiblePatchVersion },
     };
     const result = await runHostedCli(['github', 'whoami', '-f', 'json'], {
       config: makeHostedConfig({ apiBaseUrl: 'https://api.example.com', apiKey: 'key' }),
@@ -1207,7 +1212,7 @@ describe('runHostedCli', () => {
     const stderr = sink();
     const mismatched = {
       ...manifest,
-      metadata: { ...manifest.metadata, webcmdPackageVersion: '0.4.0' },
+      metadata: { ...manifest.metadata, webcmdPackageVersion: incompatibleMinorVersion },
     };
     const result = await runHostedCli(['github', 'whoami'], {
       config: makeHostedConfig({ apiBaseUrl: 'https://api.example.com', apiKey: 'key' }),
@@ -1640,7 +1645,7 @@ describe('runHostedCli', () => {
     const stderr = sink();
     const mismatched = {
       ...manifest,
-      metadata: { ...manifest.metadata, webcmdPackageVersion: '0.4.0' },
+      metadata: { ...manifest.metadata, webcmdPackageVersion: incompatibleMinorVersion },
     };
     const result = await runHostedCli(['browser', 'work', 'state'], {
       config: makeHostedConfig({ apiBaseUrl: 'https://api.example.com', apiKey: 'key' }),

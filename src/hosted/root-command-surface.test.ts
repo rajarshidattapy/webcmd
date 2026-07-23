@@ -31,7 +31,7 @@ const manifest = {
   userId: 'user_demo',
   metadata: {
     contractSchemaVersion: 1,
-    webcmdPackageVersion: '0.3.0',
+    webcmdPackageVersion: PKG_VERSION,
     generatedAt: '2026-07-08T00:00:00.000Z',
   },
   commands: [{

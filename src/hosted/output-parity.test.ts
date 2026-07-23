@@ -3,6 +3,7 @@ import { Command } from 'commander';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Strategy, type CliCommand } from '../registry.js';
 import { registerCommandToProgram } from '../commanderAdapter.js';
+import { PKG_VERSION } from '../version.js';
 import { makeHostedConfig } from './config.js';
 import { runHostedCli } from './runner.js';
 
@@ -30,7 +31,7 @@ const manifest = {
   userId: 'user_demo',
   metadata: {
     contractSchemaVersion: 1,
-    webcmdPackageVersion: '0.3.0',
+    webcmdPackageVersion: PKG_VERSION,
     generatedAt: '2026-07-14T00:00:00.000Z',
   },
   commands: [{
